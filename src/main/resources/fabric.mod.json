@@ -1,0 +1,51 @@
+{
+	"schemaVersion": 1,
+	"id": "robominecraft",
+	"version": "${version}",
+	"name": "RoboMinecraft",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/robominecraft/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "com.robominecraft.RoboMinecraft",
+				"adapter": "kotlin"
+			}
+		],
+		"client": [
+			{
+				"value": "com.robominecraft.client.RoboMinecraftClient",
+				"adapter": "kotlin"
+			}
+		],
+		"fabric-datagen": [
+			{
+				"value": "com.robominecraft.client.RoboMinecraftDataGenerator",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"robominecraft.mixins.json",
+		{
+			"config": "robominecraft.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.2",
+		"minecraft": "~1.21.10",
+		"java": ">=21",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	}
+}
