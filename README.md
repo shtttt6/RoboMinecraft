@@ -8,8 +8,10 @@ RoboMinecraft is a Fabric mod prototype inspired by RoboMaster. The MVP turns th
 - Robot mode changes the player body through attributes: max HP, larger scale, chassis speed, step height, armor, and knockback resistance.
 - Hero robots fire 42mm projectiles for 200 HP damage.
 - Infantry robots fire 17mm projectiles for 20 HP damage.
+- Hero fire rate is 5Hz. Infantry fire rate is 25Hz.
 - Robot contact deals 2 HP collision damage with a short cooldown.
 - Shooting uses heat. Shots are blocked when the current heat plus shot heat would exceed the robot's heat limit.
+- Shooting also consumes ammo. The top-right HUD shows the remaining ammo for the current robot, and firing is blocked at 0 ammo.
 - Heat cools every server tick according to the selected robot and launcher mode.
 - Empty-hand right click fires from the player's view direction.
 - Projectiles use a server-side ballistic simulation with gravity and air drag.
@@ -21,10 +23,15 @@ RoboMinecraft is a Fabric mod prototype inspired by RoboMaster. The MVP turns th
 - Hero robots are modeled as 0.7m x 0.6m x 0.6m and 25kg.
 - Chassis movement speed is derived from each level's chassis power limit and robot mass.
 - Robots cannot jump.
-- Robots can climb slopes up to 40 degrees. With the 1:10 scale this maps to about 5.0 blocks for infantry and 5.9 blocks for hero robots.
+- Robots can step up exactly 1 Minecraft block. Climb height is a fixed gameplay parameter instead of being derived from slope angle.
 - A lightweight first-person HUD appears while robot mode is active, with a white heat ring around the crosshair and a left-bottom HP bar.
 
 ## Robot Types
+
+Robot configuration GUI:
+
+- `P` opens the robot configuration screen.
+- The screen selects hero or infantry, plus hero priority mode or infantry chassis/launcher modes.
 
 Hero robot:
 
@@ -50,6 +57,14 @@ Infantry robot:
 - `/robomc xp set <0-5000>` sets experience and derives the level.
 - `/robomc xp add <amount>` adds experience and derives the level.
 
+## Ammo
+
+- `I` opens the hero ammo purchase screen for 42mm ammo.
+- `O` opens the infantry ammo purchase screen for 17mm ammo.
+- Hero ammo buttons adjust the selected purchase amount by `-10`, `-5`, `-2`, `-1`, `+1`, `+2`, `+5`, and `+10`.
+- Infantry ammo buttons adjust the selected purchase amount by `-100`, `-50`, `-20`, `-10`, `+10`, `+20`, `+50`, and `+100`.
+- The purchase screens are currently MVP test screens, so redeeming ammo adds the selected amount without an economy cost.
+
 ## Requirements
 
 - Minecraft `1.21.10`
@@ -66,6 +81,15 @@ Use Java 21 as the Gradle JVM in IntelliJ IDEA.
 .\gradlew.bat build
 .\gradlew.bat runClient
 ```
+
+## Code Structure
+
+- `RoboMinecraft.kt`: mod entrypoint, commands, player state, server tick orchestration, attributes, combat dispatch.
+- `RobotModels.kt`: robot types, modes, physical specs, bullets, rules, level interpolation, fire rates.
+- `RobotProjectiles.kt`: ballistic projectile simulation and short visible trajectory particles.
+- `RobotPackets.kt`: client-server payloads for firing, robot config, ammo purchase, and HUD sync.
+- `client/RoboMinecraftClient.kt`: client input handling, key bindings, client HUD state, and HUD rendering.
+- `client/RobotScreens.kt`: robot configuration and ammo purchase screens.
 
 The current MVP deliberately avoids a vehicle entity. Future work should replace the temporary HUD and attribute-only body feel with a dedicated mech player renderer, custom weapons, team logic, armor/heat systems, and RoboMaster-style objective rules.
 

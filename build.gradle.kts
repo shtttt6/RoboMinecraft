@@ -15,6 +15,28 @@ repositories {
 	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories.
+	exclusiveContent {
+		forRepository {
+			maven {
+				name = "Modrinth"
+				url = uri("https://api.modrinth.com/maven")
+			}
+		}
+		filter {
+			includeGroup("maven.modrinth")
+		}
+	}
+	exclusiveContent {
+		forRepository {
+			maven {
+				name = "EngineHub"
+				url = uri("https://maven.enginehub.org/repo/")
+			}
+		}
+		filter {
+			includeGroup("org.enginehub.worldeditcui-protocol")
+		}
+	}
 }
 
 loom {
@@ -43,6 +65,10 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation("net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty("fabric_api_version").get()}")
 	modImplementation("net.fabricmc:fabric-language-kotlin:${providers.gradleProperty("fabric_kotlin_version").get()}")
+	modLocalRuntime("maven.modrinth:worldedit:${providers.gradleProperty("worldedit_version").get()}")
+	modLocalRuntime("org.enginehub.worldeditcui-protocol:worldeditcui-protocol-fabric-mc1.21.9:${providers.gradleProperty("worldeditcui_protocol_version").get()}") {
+		isTransitive = false
+	}
 }
 
 tasks.processResources {
