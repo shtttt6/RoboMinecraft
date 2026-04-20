@@ -4,7 +4,10 @@ import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
 import net.minecraft.commands.CommandSourceStack
@@ -17,6 +20,7 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.sounds.SoundSource
 import net.minecraft.world.InteractionHand
+import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.ai.attributes.Attribute
@@ -37,6 +41,8 @@ object RoboMinecraft : ModInitializer {
 	private const val COLLISION_DAMAGE = 2.0f
 	private const val COLLISION_COOLDOWN_TICKS = 20
 	private const val BASE_PLAYER_HEALTH = 20.0
+	private const val ROBOT_FOOD_LEVEL = 17
+	private const val ROBOT_SATURATION_LEVEL = 0.0f
 	private const val MAX_SHOTS_PER_REQUEST = 3
 
 	private val logger = LoggerFactory.getLogger(MOD_ID)
@@ -46,6 +52,8 @@ object RoboMinecraft : ModInitializer {
 
 	override fun onInitialize() {
 		registerNetworking()
+		registerAttackOverrides()
+		registerPlayerLifecycle()
 		registerRobotModeMaintenance()
 		registerCommands()
 		logger.info("RoboMaster MVP initialized")
@@ -71,6 +79,36 @@ object RoboMinecraft : ModInitializer {
 		}
 	}
 
+	private fun registerAttackOverrides() {
+		AttackBlockCallback.EVENT.register { player, _, hand, _, _ ->
+			if (hand == InteractionHand.MAIN_HAND && isRobotPilot(player) && player.mainHandItem.isEmpty) {
+				InteractionResult.FAIL
+			} else {
+				InteractionResult.PASS
+			}
+		}
+		AttackEntityCallback.EVENT.register { player, _, hand, _, _ ->
+			if (hand == InteractionHand.MAIN_HAND && isRobotPilot(player) && player.mainHandItem.isEmpty) {
+				InteractionResult.FAIL
+			} else {
+				InteractionResult.PASS
+			}
+		}
+	}
+
+	private fun registerPlayerLifecycle() {
+		ServerPlayerEvents.AFTER_RESPAWN.register { _, newPlayer, _ ->
+			val state = stateFor(newPlayer)
+			state.appliedMaxHp = 0
+
+			if (state.enabled) {
+				val stats = state.stats()
+				applyRobotAttributes(newPlayer, state, stats)
+				maintainRobotVitals(newPlayer)
+			}
+		}
+	}
+
 	private fun registerRobotModeMaintenance() {
 		ServerTickEvents.END_SERVER_TICK.register { server ->
 			server.playerList.players.forEach { player ->
@@ -81,6 +119,7 @@ object RoboMinecraft : ModInitializer {
 
 				if (state.enabled) {
 					applyRobotAttributes(player, state, stats)
+					maintainRobotVitals(player)
 					applyCollisionDamage(player)
 				} else {
 					removeRobotAttributes(player)
@@ -241,6 +280,12 @@ object RoboMinecraft : ModInitializer {
 		return target !== player && target.isAlive && !target.isSpectator && target.isPickable && target.canBeHitByProjectile()
 	}
 
+	private fun maintainRobotVitals(player: ServerPlayer) {
+		player.foodData.setFoodLevel(ROBOT_FOOD_LEVEL)
+		player.foodData.setSaturation(ROBOT_SATURATION_LEVEL)
+		player.setSprinting(false)
+	}
+
 	private fun applyCollisionDamage(player: ServerPlayer) {
 		val serverTick = player.level().server.tickCount
 		val previousCollisionTick = lastCollisionTicks[player.uuid] ?: -COLLISION_COOLDOWN_TICKS
@@ -331,7 +376,7 @@ object RoboMinecraft : ModInitializer {
 
 		if (enabled) {
 			applyRobotAttributes(player, state, state.stats())
-			player.displayClientMessage(Component.literal("${statusLine(player)} | empty-hand right click fires"), true)
+			player.displayClientMessage(Component.literal("${statusLine(player)} | empty-hand left click fires | right click auto-aims"), true)
 		} else {
 			removeRobotAttributes(player)
 			player.displayClientMessage(Component.literal("RoboMaster chassis offline."), true)
@@ -440,7 +485,8 @@ object RoboMinecraft : ModInitializer {
 		applyAttribute(player, Attributes.MOVEMENT_SPEED, AttributeModifier(RobotAttributeIds.MOVEMENT, movementBoost, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 		applyAttribute(player, Attributes.STEP_HEIGHT, AttributeModifier(RobotAttributeIds.STEP_HEIGHT, stepHeightBoost, AttributeModifier.Operation.ADD_VALUE))
 		applyAttribute(player, Attributes.JUMP_STRENGTH, AttributeModifier(RobotAttributeIds.JUMP_STRENGTH, -1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
-		applyAttribute(player, Attributes.ARMOR, AttributeModifier(RobotAttributeIds.ARMOR, 8.0, AttributeModifier.Operation.ADD_VALUE))
+		applyAttribute(player, Attributes.ARMOR, AttributeModifier(RobotAttributeIds.ARMOR, -1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
+		applyAttribute(player, Attributes.ARMOR_TOUGHNESS, AttributeModifier(RobotAttributeIds.ARMOR_TOUGHNESS, -1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 		applyAttribute(player, Attributes.KNOCKBACK_RESISTANCE, AttributeModifier(RobotAttributeIds.KNOCKBACK, 0.65, AttributeModifier.Operation.ADD_VALUE))
 		applyAttribute(player, Attributes.SCALE, AttributeModifier(RobotAttributeIds.SCALE, scaleBoost, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 
@@ -456,6 +502,7 @@ object RoboMinecraft : ModInitializer {
 		removeAttribute(player, Attributes.STEP_HEIGHT, RobotAttributeIds.STEP_HEIGHT)
 		removeAttribute(player, Attributes.JUMP_STRENGTH, RobotAttributeIds.JUMP_STRENGTH)
 		removeAttribute(player, Attributes.ARMOR, RobotAttributeIds.ARMOR)
+		removeAttribute(player, Attributes.ARMOR_TOUGHNESS, RobotAttributeIds.ARMOR_TOUGHNESS)
 		removeAttribute(player, Attributes.KNOCKBACK_RESISTANCE, RobotAttributeIds.KNOCKBACK)
 		removeAttribute(player, Attributes.SCALE, RobotAttributeIds.SCALE)
 	}

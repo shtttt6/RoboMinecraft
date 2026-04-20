@@ -13,7 +13,7 @@ RoboMinecraft is a Fabric mod prototype inspired by RoboMaster. The MVP turns th
 - Shooting uses heat. Shots are blocked when the current heat plus shot heat would exceed the robot's heat limit.
 - Shooting also consumes ammo. The top-right HUD shows the remaining ammo for the current robot, and firing is blocked at 0 ammo.
 - Heat cools every server tick according to the selected robot and launcher mode.
-- Empty-hand right click fires from the player's view direction.
+- Empty-hand left click fires from the player's view direction; right click auto-aims at visible entities inside the center frame.
 - Projectiles use a server-side ballistic simulation with gravity and air drag.
 - The world scale is 1 real meter to 10 Minecraft blocks.
 - 17mm projectiles are modeled as 17mm TPU spheres weighing 3.2g.

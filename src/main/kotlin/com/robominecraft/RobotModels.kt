@@ -25,6 +25,7 @@ object RobotAttributeIds {
 	val STEP_HEIGHT: ResourceLocation = RobotConstants.id("robot_step_height")
 	val JUMP_STRENGTH: ResourceLocation = RobotConstants.id("robot_jump_strength")
 	val ARMOR: ResourceLocation = RobotConstants.id("robot_armor")
+	val ARMOR_TOUGHNESS: ResourceLocation = RobotConstants.id("robot_armor_toughness")
 	val KNOCKBACK: ResourceLocation = RobotConstants.id("robot_knockback_resistance")
 }
 
