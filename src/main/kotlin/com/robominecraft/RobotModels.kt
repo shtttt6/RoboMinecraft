@@ -209,15 +209,19 @@ object RobotRules {
 			HeroMode.RANGED -> interpolate(level, 50, 70, 100)
 		}
 		val heatLimit = when (mode) {
-			HeroMode.MELEE -> interpolate(level, 140, 184, 240)
-			HeroMode.RANGED -> interpolate(level, 100, 113, 130)
+			HeroMode.MELEE -> interpolate(level, 140, 180, 240)
+			HeroMode.RANGED -> interpolate(level, 100, 115, 130)
+		}
+		val heatCooling = when (mode) {
+			HeroMode.MELEE -> interpolateDouble(level, 5.0, 10.0, 20.0)
+			HeroMode.RANGED -> interpolateDouble(level, 5.0, 10.0, 15.0)
 		}
 
 		return RobotStats(
 			maxHp = maxHp,
 			chassisPower = chassisPower,
 			heatLimit = heatLimit,
-			heatCoolingPerSecond = if (mode == HeroMode.MELEE) 18.0 else 14.0,
+			heatCoolingPerSecond = heatCooling,
 			shotHeat = 100.0,
 			fireRateHz = 5.0,
 			bullet = heroBullet,
@@ -241,11 +245,11 @@ object RobotRules {
 		}
 		val heatLimit = when (launcherMode) {
 			InfantryLauncherMode.BURST -> interpolate(level, 170, 210, 260)
-			InfantryLauncherMode.COOLING -> interpolate(level, 40, 76, 120)
+			InfantryLauncherMode.COOLING -> interpolate(level, 40, 80, 120)
 		}
 		val heatCooling = when (launcherMode) {
-			InfantryLauncherMode.BURST -> interpolateDouble(level, 5.0, 11.7, 20.0)
-			InfantryLauncherMode.COOLING -> interpolateDouble(level, 15.0, 21.7, 30.0)
+			InfantryLauncherMode.BURST -> interpolateDouble(level, 5.0, 10.0, 20.0)
+			InfantryLauncherMode.COOLING -> interpolateDouble(level, 10.0, 20.0, 30.0)
 		}
 
 		return RobotStats(

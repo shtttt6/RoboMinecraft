@@ -38,7 +38,8 @@ Hero robot:
 - `/robomc hero melee` selects the melee-priority hero chassis.
 - `/robomc hero ranged` selects the ranged-priority hero chassis.
 - Hero HP and chassis power scale from level 1 to 10 using the 1/5/10 rule anchors.
-- Hero heat limit scales from 140 to 240 in melee-priority mode, and from 100 to 130 in ranged-priority mode.
+- Melee-priority hero heat limit uses level anchors 140/180/240, with 5/10/20 heat cooling per second.
+- Ranged-priority hero heat limit uses level anchors 100/115/130, with 5/10/15 heat cooling per second.
 
 Infantry robot:
 
@@ -46,8 +47,8 @@ Infantry robot:
 - `/robomc infantry power cooling` selects power-priority chassis and cooling-priority launcher.
 - `/robomc infantry health burst` selects health-priority chassis and burst-priority launcher.
 - `/robomc infantry health cooling` selects health-priority chassis and cooling-priority launcher.
-- Burst-priority launcher heat limit scales from 170 to 260, with 5-20 heat cooling per second.
-- Cooling-priority launcher heat limit scales from 40 to 120, with 15-30 heat cooling per second.
+- Burst-priority launcher heat limit uses level anchors 170/210/260, with 5/10/20 heat cooling per second.
+- Cooling-priority launcher heat limit uses level anchors 40/80/120, with 10/20/30 heat cooling per second.
 
 ## Test Commands
 
