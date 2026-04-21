@@ -20,6 +20,7 @@ import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import kotlin.math.max
 import kotlin.math.cos
+import kotlin.math.pow
 import kotlin.math.sin
 
 class RobotVehicleEntity(
@@ -132,12 +133,26 @@ class RobotVehicleEntity(
 		}
 
 		val rider = controllingPassenger as? net.minecraft.server.level.ServerPlayer
-		if (rider != null && !RoboMinecraft.isAerialFlightMode(rider) && fallDistance > AERIAL_FATAL_FALL_DISTANCE_BLOCKS) {
+		val deathChance = aerialCrashDeathChance(fallDistance)
+		if (rider != null && !RoboMinecraft.isAerialFlightMode(rider) && random.nextDouble() < deathChance) {
 			RoboMinecraft.killAerialPilot(rider)
 		}
 
 		resetFallDistance()
 		return true
+	}
+
+	private fun aerialCrashDeathChance(fallDistance: Double): Double {
+		if (fallDistance <= 0.0) {
+			return 0.0
+		}
+		if (fallDistance >= AERIAL_FATAL_FALL_DISTANCE_BLOCKS) {
+			return 1.0
+		}
+
+		// 5 blocks -> 10%, 20 blocks -> 100%, with exponential growth in between.
+		return 10.0.pow((fallDistance - AERIAL_FATAL_FALL_DISTANCE_BLOCKS) / AERIAL_FATAL_FALL_DISTANCE_BLOCKS_RANGE)
+			.coerceIn(0.0, 1.0)
 	}
 
 	override fun canBeCollidedWith(entity: Entity?): Boolean {
@@ -218,6 +233,7 @@ class RobotVehicleEntity(
 	}
 	companion object {
 		private const val AERIAL_FATAL_FALL_DISTANCE_BLOCKS = 20.0
+		private const val AERIAL_FATAL_FALL_DISTANCE_BLOCKS_RANGE = 15.0
 
 		private val DATA_ROBOT_KIND: EntityDataAccessor<Int> =
 			SynchedEntityData.defineId(RobotVehicleEntity::class.java, EntityDataSerializers.INT)
