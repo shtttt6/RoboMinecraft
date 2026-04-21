@@ -39,6 +39,11 @@ enum class HeroMode(val displayName: String) {
 	RANGED("ranged-priority")
 }
 
+enum class HeroMobilityMode(val displayName: String) {
+	REGULAR("regular"),
+	WHEEL_LEGGED("wheel-legged")
+}
+
 enum class InfantryChassisMode(val displayName: String) {
 	POWER("power-priority"),
 	HEALTH("health-priority")
@@ -47,6 +52,11 @@ enum class InfantryChassisMode(val displayName: String) {
 enum class InfantryLauncherMode(val displayName: String) {
 	BURST("burst-priority"),
 	COOLING("cooling-priority")
+}
+
+enum class InfantryMobilityMode(val displayName: String) {
+	REGULAR("regular"),
+	WHEEL_LEGGED("wheel-legged")
 }
 
 data class BulletSpec(
@@ -84,19 +94,25 @@ data class RobotStats(
 	val fireRateHz: Double,
 	val bullet: BulletSpec,
 	val physicalSpec: RobotPhysicalSpec,
-	val movementSpeedMetersPerSecond: Double
+	val movementSpeedMetersPerSecond: Double,
+	val stepHeightBlocks: Double,
+	val jumpStrength: Double,
+	val jumpHeightBlocks: Double,
+	val stepPauseTicks: Int
 )
 
 data class RobotProfile(
 	val kind: RobotKind = RobotKind.INFANTRY,
 	val heroMode: HeroMode = HeroMode.MELEE,
+	val heroMobilityMode: HeroMobilityMode = HeroMobilityMode.REGULAR,
+	val infantryMobilityMode: InfantryMobilityMode = InfantryMobilityMode.REGULAR,
 	val infantryChassisMode: InfantryChassisMode = InfantryChassisMode.POWER,
 	val infantryLauncherMode: InfantryLauncherMode = InfantryLauncherMode.BURST
 ) {
 	fun displayName(): String {
 		return when (kind) {
-			RobotKind.HERO -> "${kind.displayName} ${heroMode.displayName}"
-			RobotKind.INFANTRY -> "${kind.displayName} ${infantryChassisMode.displayName}/${infantryLauncherMode.displayName}"
+			RobotKind.HERO -> "${kind.displayName} ${heroMobilityMode.displayName} ${heroMode.displayName}"
+			RobotKind.INFANTRY -> "${kind.displayName} ${infantryMobilityMode.displayName} ${infantryChassisMode.displayName}/${infantryLauncherMode.displayName}"
 		}
 	}
 }
@@ -108,6 +124,11 @@ data class PilotState(
 	var experience: Int = 0,
 	var heat: Double = 0.0,
 	var appliedMaxHp: Int = 0,
+	var movementPauseTicks: Int = 0,
+	var lastMovementY: Double? = null,
+	var lastMovementOnGround: Boolean = false,
+	var pauseLockX: Double? = null,
+	var pauseLockZ: Double? = null,
 	var heroAmmo: Int = 0,
 	var infantryAmmo: Int = 0
 ) {
@@ -187,8 +208,8 @@ object RobotRules {
 
 	fun stats(profile: RobotProfile, level: Int): RobotStats {
 		return when (profile.kind) {
-			RobotKind.HERO -> heroStats(level, profile.heroMode)
-			RobotKind.INFANTRY -> infantryStats(level, profile.infantryChassisMode, profile.infantryLauncherMode)
+			RobotKind.HERO -> heroStats(level, profile.heroMobilityMode, profile.heroMode)
+			RobotKind.INFANTRY -> infantryStats(level, profile.infantryMobilityMode, profile.infantryChassisMode, profile.infantryLauncherMode)
 		}
 	}
 
@@ -200,7 +221,7 @@ object RobotRules {
 		return (1..10).last { requiredExperienceForLevel(it) <= experience.coerceAtLeast(0) }
 	}
 
-	private fun heroStats(level: Int, mode: HeroMode): RobotStats {
+	private fun heroStats(level: Int, mobilityMode: HeroMobilityMode, mode: HeroMode): RobotStats {
 		val maxHp = when (mode) {
 			HeroMode.MELEE -> interpolate(level, 200, 300, 450)
 			HeroMode.RANGED -> interpolate(level, 150, 210, 300)
@@ -217,6 +238,22 @@ object RobotRules {
 			HeroMode.MELEE -> interpolateDouble(level, 5.0, 10.0, 20.0)
 			HeroMode.RANGED -> interpolateDouble(level, 5.0, 10.0, 15.0)
 		}
+		val stepHeightBlocks = when (mobilityMode) {
+			HeroMobilityMode.REGULAR -> RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS
+			HeroMobilityMode.WHEEL_LEGGED -> 2.0
+		}
+		val jumpStrength = when (mobilityMode) {
+			HeroMobilityMode.REGULAR -> 0.0
+			HeroMobilityMode.WHEEL_LEGGED -> 0.6
+		}
+		val jumpHeightBlocks = when (mobilityMode) {
+			HeroMobilityMode.REGULAR -> 0.0
+			HeroMobilityMode.WHEEL_LEGGED -> 2.0
+		}
+		val stepPauseTicks = when (mobilityMode) {
+			HeroMobilityMode.REGULAR -> 0
+			HeroMobilityMode.WHEEL_LEGGED -> 10
+		}
 
 		return RobotStats(
 			maxHp = maxHp,
@@ -227,12 +264,17 @@ object RobotRules {
 			fireRateHz = 5.0,
 			bullet = heroBullet,
 			physicalSpec = heroPhysicalSpec,
-			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassisPower, heroPhysicalSpec.massKilograms)
+			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassisPower, heroPhysicalSpec.massKilograms),
+			stepHeightBlocks = stepHeightBlocks,
+			jumpStrength = jumpStrength,
+			jumpHeightBlocks = jumpHeightBlocks,
+			stepPauseTicks = stepPauseTicks
 		)
 	}
 
 	private fun infantryStats(
 		level: Int,
+		mobilityMode: InfantryMobilityMode,
 		chassisMode: InfantryChassisMode,
 		launcherMode: InfantryLauncherMode
 	): RobotStats {
@@ -252,6 +294,22 @@ object RobotRules {
 			InfantryLauncherMode.BURST -> interpolateDouble(level, 5.0, 10.0, 20.0)
 			InfantryLauncherMode.COOLING -> interpolateDouble(level, 10.0, 20.0, 30.0)
 		}
+		val stepHeightBlocks = when (mobilityMode) {
+			InfantryMobilityMode.REGULAR -> RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS
+			InfantryMobilityMode.WHEEL_LEGGED -> 2.0
+		}
+		val jumpStrength = when (mobilityMode) {
+			InfantryMobilityMode.REGULAR -> 0.0
+			InfantryMobilityMode.WHEEL_LEGGED -> 0.6
+		}
+		val jumpHeightBlocks = when (mobilityMode) {
+			InfantryMobilityMode.REGULAR -> 0.0
+			InfantryMobilityMode.WHEEL_LEGGED -> 2.0
+		}
+		val stepPauseTicks = when (mobilityMode) {
+			InfantryMobilityMode.REGULAR -> 0
+			InfantryMobilityMode.WHEEL_LEGGED -> 10
+		}
 
 		return RobotStats(
 			maxHp = maxHp,
@@ -262,7 +320,11 @@ object RobotRules {
 			fireRateHz = 25.0,
 			bullet = infantryBullet,
 			physicalSpec = infantryPhysicalSpec,
-			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassisPower, infantryPhysicalSpec.massKilograms)
+			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassisPower, infantryPhysicalSpec.massKilograms),
+			stepHeightBlocks = stepHeightBlocks,
+			jumpStrength = jumpStrength,
+			jumpHeightBlocks = jumpHeightBlocks,
+			stepPauseTicks = stepPauseTicks
 		)
 	}
 

@@ -2,8 +2,10 @@ package com.robominecraft.client
 
 import com.robominecraft.BuyAmmoPayload
 import com.robominecraft.HeroMode
+import com.robominecraft.HeroMobilityMode
 import com.robominecraft.InfantryChassisMode
 import com.robominecraft.InfantryLauncherMode
+import com.robominecraft.InfantryMobilityMode
 import com.robominecraft.RobotConfigPayload
 import com.robominecraft.RobotKind
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
@@ -17,6 +19,8 @@ import kotlin.math.max
 class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 	private var robotKind: RobotKind = RobotClientState.robotKind
 	private var heroMode: HeroMode = RobotClientState.heroMode
+	private var heroMobilityMode: HeroMobilityMode = RobotClientState.heroMobilityMode
+	private var infantryMobilityMode: InfantryMobilityMode = RobotClientState.infantryMobilityMode
 	private var infantryChassisMode: InfantryChassisMode = RobotClientState.infantryChassisMode
 	private var infantryLauncherMode: InfantryLauncherMode = RobotClientState.infantryLauncherMode
 
@@ -40,6 +44,16 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 
 		y += 38
 		if (robotKind == RobotKind.HERO) {
+			addRenderableWidget(toggleButton("常规英雄", heroMobilityMode == HeroMobilityMode.REGULAR, centerX - 124, y) {
+				heroMobilityMode = HeroMobilityMode.REGULAR
+				rebuildControls()
+			})
+			addRenderableWidget(toggleButton("英雄步兵", heroMobilityMode == HeroMobilityMode.WHEEL_LEGGED, centerX + 4, y) {
+				heroMobilityMode = HeroMobilityMode.WHEEL_LEGGED
+				rebuildControls()
+			})
+
+			y += 30
 			addRenderableWidget(toggleButton("近战优先", heroMode == HeroMode.MELEE, centerX - 124, y) {
 				heroMode = HeroMode.MELEE
 				rebuildControls()
@@ -49,6 +63,16 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 				rebuildControls()
 			})
 		} else {
+			addRenderableWidget(toggleButton("常规步兵", infantryMobilityMode == InfantryMobilityMode.REGULAR, centerX - 124, y) {
+				infantryMobilityMode = InfantryMobilityMode.REGULAR
+				rebuildControls()
+			})
+			addRenderableWidget(toggleButton("轮腿步兵", infantryMobilityMode == InfantryMobilityMode.WHEEL_LEGGED, centerX + 4, y) {
+				infantryMobilityMode = InfantryMobilityMode.WHEEL_LEGGED
+				rebuildControls()
+			})
+
+			y += 30
 			addRenderableWidget(toggleButton("功率优先", infantryChassisMode == InfantryChassisMode.POWER, centerX - 124, y) {
 				infantryChassisMode = InfantryChassisMode.POWER
 				rebuildControls()
@@ -77,6 +101,8 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 						RobotConfigPayload(
 							robotKind = robotKind.ordinal,
 							heroMode = heroMode.ordinal,
+							heroMobilityMode = heroMobilityMode.ordinal,
+							infantryMobilityMode = infantryMobilityMode.ordinal,
 							infantryChassisMode = infantryChassisMode.ordinal,
 							infantryLauncherMode = infantryLauncherMode.ordinal
 						)

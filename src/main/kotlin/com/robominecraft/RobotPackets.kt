@@ -21,6 +21,8 @@ data class RobotHudPayload(
 	val infantryAmmo: Int,
 	val robotKind: Int,
 	val heroMode: Int,
+	val heroMobilityMode: Int,
+	val infantryMobilityMode: Int,
 	val infantryChassisMode: Int,
 	val infantryLauncherMode: Int
 ) : CustomPacketPayload {
@@ -30,24 +32,33 @@ data class RobotHudPayload(
 
 	companion object {
 		val ID: CustomPacketPayload.Type<RobotHudPayload> = CustomPacketPayload.Type(RobotConstants.id("robot_hud"))
-		val CODEC: StreamCodec<RegistryFriendlyByteBuf, RobotHudPayload> = StreamCodec.composite(
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::heat,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::heatLimit,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::heroAmmo,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::infantryAmmo,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::robotKind,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::heroMode,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::infantryChassisMode,
-			ByteBufCodecs.VAR_INT,
-			RobotHudPayload::infantryLauncherMode,
-			::RobotHudPayload
+		val CODEC: StreamCodec<RegistryFriendlyByteBuf, RobotHudPayload> = StreamCodec.of(
+			{ buffer, payload ->
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.heat)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.heatLimit)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroAmmo)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.infantryAmmo)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.robotKind)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroMode)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroMobilityMode)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.infantryMobilityMode)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.infantryChassisMode)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.infantryLauncherMode)
+			},
+			{ buffer ->
+				RobotHudPayload(
+					heat = ByteBufCodecs.VAR_INT.decode(buffer),
+					heatLimit = ByteBufCodecs.VAR_INT.decode(buffer),
+					heroAmmo = ByteBufCodecs.VAR_INT.decode(buffer),
+					infantryAmmo = ByteBufCodecs.VAR_INT.decode(buffer),
+					robotKind = ByteBufCodecs.VAR_INT.decode(buffer),
+					heroMode = ByteBufCodecs.VAR_INT.decode(buffer),
+					heroMobilityMode = ByteBufCodecs.VAR_INT.decode(buffer),
+					infantryMobilityMode = ByteBufCodecs.VAR_INT.decode(buffer),
+					infantryChassisMode = ByteBufCodecs.VAR_INT.decode(buffer),
+					infantryLauncherMode = ByteBufCodecs.VAR_INT.decode(buffer)
+				)
+			}
 		)
 	}
 }
@@ -55,6 +66,8 @@ data class RobotHudPayload(
 data class RobotConfigPayload(
 	val robotKind: Int,
 	val heroMode: Int,
+	val heroMobilityMode: Int,
+	val infantryMobilityMode: Int,
 	val infantryChassisMode: Int,
 	val infantryLauncherMode: Int
 ) : CustomPacketPayload {
@@ -69,6 +82,10 @@ data class RobotConfigPayload(
 			RobotConfigPayload::robotKind,
 			ByteBufCodecs.VAR_INT,
 			RobotConfigPayload::heroMode,
+			ByteBufCodecs.VAR_INT,
+			RobotConfigPayload::heroMobilityMode,
+			ByteBufCodecs.VAR_INT,
+			RobotConfigPayload::infantryMobilityMode,
 			ByteBufCodecs.VAR_INT,
 			RobotConfigPayload::infantryChassisMode,
 			ByteBufCodecs.VAR_INT,

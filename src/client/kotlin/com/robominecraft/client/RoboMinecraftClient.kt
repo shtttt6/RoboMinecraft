@@ -2,8 +2,10 @@ package com.robominecraft.client
 
 import com.robominecraft.FireBlasterPayload
 import com.robominecraft.HeroMode
+import com.robominecraft.HeroMobilityMode
 import com.robominecraft.InfantryChassisMode
 import com.robominecraft.InfantryLauncherMode
+import com.robominecraft.InfantryMobilityMode
 import com.robominecraft.RoboMinecraft
 import com.robominecraft.RobotHudPayload
 import com.robominecraft.RobotKind
@@ -55,6 +57,8 @@ object RoboMinecraftClient : ClientModInitializer {
 			RobotClientState.infantryAmmo = payload.infantryAmmo.coerceAtLeast(0)
 			RobotClientState.robotKind = enumByOrdinal(payload.robotKind, RobotKind.INFANTRY)
 			RobotClientState.heroMode = enumByOrdinal(payload.heroMode, HeroMode.MELEE)
+			RobotClientState.heroMobilityMode = enumByOrdinal(payload.heroMobilityMode, HeroMobilityMode.REGULAR)
+			RobotClientState.infantryMobilityMode = enumByOrdinal(payload.infantryMobilityMode, InfantryMobilityMode.REGULAR)
 			RobotClientState.infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.POWER)
 			RobotClientState.infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.BURST)
 		}
@@ -390,6 +394,8 @@ object RobotClientState {
 	var infantryAmmo: Int = 0
 	var robotKind: RobotKind = RobotKind.INFANTRY
 	var heroMode: HeroMode = HeroMode.MELEE
+	var heroMobilityMode: HeroMobilityMode = HeroMobilityMode.REGULAR
+	var infantryMobilityMode: InfantryMobilityMode = InfantryMobilityMode.REGULAR
 	var infantryChassisMode: InfantryChassisMode = InfantryChassisMode.POWER
 	var infantryLauncherMode: InfantryLauncherMode = InfantryLauncherMode.BURST
 

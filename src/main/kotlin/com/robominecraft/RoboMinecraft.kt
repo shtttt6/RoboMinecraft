@@ -44,6 +44,7 @@ object RoboMinecraft : ModInitializer {
 	private const val ROBOT_FOOD_LEVEL = 17
 	private const val ROBOT_SATURATION_LEVEL = 0.0f
 	private const val MAX_SHOTS_PER_REQUEST = 3
+	private const val DIRECT_CLIMB_TRIGGER_HEIGHT = 1.5
 
 	private val logger = LoggerFactory.getLogger(MOD_ID)
 	private val pilotStates = mutableMapOf<UUID, PilotState>()
@@ -100,6 +101,7 @@ object RoboMinecraft : ModInitializer {
 		ServerPlayerEvents.AFTER_RESPAWN.register { _, newPlayer, _ ->
 			val state = stateFor(newPlayer)
 			state.appliedMaxHp = 0
+			resetRobotLocomotionState(state)
 
 			if (state.enabled) {
 				val stats = state.stats()
@@ -118,10 +120,12 @@ object RoboMinecraft : ModInitializer {
 				state.heat = max(0.0, state.heat - stats.heatCoolingPerSecond / 20.0)
 
 				if (state.enabled) {
+					maintainRobotLocomotion(player, state, stats)
 					applyRobotAttributes(player, state, stats)
 					maintainRobotVitals(player)
 					applyCollisionDamage(player)
 				} else {
+					resetRobotLocomotionState(state)
 					removeRobotAttributes(player)
 				}
 
@@ -144,27 +148,79 @@ object RoboMinecraft : ModInitializer {
 					})
 					.then(
 						Commands.literal("hero")
-							.then(Commands.literal("melee").executes { context -> setHero(context, HeroMode.MELEE) })
-							.then(Commands.literal("ranged").executes { context -> setHero(context, HeroMode.RANGED) })
+							.then(
+								Commands.literal("regular")
+									.then(Commands.literal("melee").executes { context -> setHero(context, HeroMobilityMode.REGULAR, HeroMode.MELEE) })
+									.then(Commands.literal("ranged").executes { context -> setHero(context, HeroMobilityMode.REGULAR, HeroMode.RANGED) })
+							)
+							.then(
+								Commands.literal("wheellegged")
+									.then(Commands.literal("melee").executes { context -> setHero(context, HeroMobilityMode.WHEEL_LEGGED, HeroMode.MELEE) })
+									.then(Commands.literal("ranged").executes { context -> setHero(context, HeroMobilityMode.WHEEL_LEGGED, HeroMode.RANGED) })
+							)
+							.then(Commands.literal("melee").executes { context -> setHero(context, HeroMobilityMode.REGULAR, HeroMode.MELEE) })
+							.then(Commands.literal("ranged").executes { context -> setHero(context, HeroMobilityMode.REGULAR, HeroMode.RANGED) })
 					)
 					.then(
 						Commands.literal("infantry")
 							.then(
+								Commands.literal("regular")
+									.then(
+										Commands.literal("power")
+											.then(Commands.literal("burst").executes { context ->
+												setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.POWER, InfantryLauncherMode.BURST)
+											})
+											.then(Commands.literal("cooling").executes { context ->
+												setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.POWER, InfantryLauncherMode.COOLING)
+											})
+									)
+									.then(
+										Commands.literal("health")
+											.then(Commands.literal("burst").executes { context ->
+												setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.HEALTH, InfantryLauncherMode.BURST)
+											})
+											.then(Commands.literal("cooling").executes { context ->
+												setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.HEALTH, InfantryLauncherMode.COOLING)
+											})
+									)
+							)
+							.then(
+								Commands.literal("wheellegged")
+									.then(
+										Commands.literal("power")
+											.then(Commands.literal("burst").executes { context ->
+												setInfantry(context, InfantryMobilityMode.WHEEL_LEGGED, InfantryChassisMode.POWER, InfantryLauncherMode.BURST)
+											})
+											.then(Commands.literal("cooling").executes { context ->
+												setInfantry(context, InfantryMobilityMode.WHEEL_LEGGED, InfantryChassisMode.POWER, InfantryLauncherMode.COOLING)
+											})
+									)
+									.then(
+										Commands.literal("health")
+											.then(Commands.literal("burst").executes { context ->
+												setInfantry(context, InfantryMobilityMode.WHEEL_LEGGED, InfantryChassisMode.HEALTH, InfantryLauncherMode.BURST)
+											})
+											.then(Commands.literal("cooling").executes { context ->
+												setInfantry(context, InfantryMobilityMode.WHEEL_LEGGED, InfantryChassisMode.HEALTH, InfantryLauncherMode.COOLING)
+											})
+									)
+							)
+							.then(
 								Commands.literal("power")
 									.then(Commands.literal("burst").executes { context ->
-										setInfantry(context, InfantryChassisMode.POWER, InfantryLauncherMode.BURST)
+										setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.POWER, InfantryLauncherMode.BURST)
 									})
 									.then(Commands.literal("cooling").executes { context ->
-										setInfantry(context, InfantryChassisMode.POWER, InfantryLauncherMode.COOLING)
+										setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.POWER, InfantryLauncherMode.COOLING)
 									})
 							)
 							.then(
 								Commands.literal("health")
 									.then(Commands.literal("burst").executes { context ->
-										setInfantry(context, InfantryChassisMode.HEALTH, InfantryLauncherMode.BURST)
+										setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.HEALTH, InfantryLauncherMode.BURST)
 									})
 									.then(Commands.literal("cooling").executes { context ->
-										setInfantry(context, InfantryChassisMode.HEALTH, InfantryLauncherMode.COOLING)
+										setInfantry(context, InfantryMobilityMode.REGULAR, InfantryChassisMode.HEALTH, InfantryLauncherMode.COOLING)
 									})
 							)
 					)
@@ -317,6 +373,8 @@ object RoboMinecraft : ModInitializer {
 				infantryAmmo = state.infantryAmmo,
 				robotKind = state.profile.kind.ordinal,
 				heroMode = state.profile.heroMode.ordinal,
+				heroMobilityMode = state.profile.heroMobilityMode.ordinal,
+				infantryMobilityMode = state.profile.infantryMobilityMode.ordinal,
 				infantryChassisMode = state.profile.infantryChassisMode.ordinal,
 				infantryLauncherMode = state.profile.infantryLauncherMode.ordinal
 			)
@@ -329,6 +387,8 @@ object RoboMinecraft : ModInitializer {
 		val profile = RobotProfile(
 			kind = enumByOrdinal(payload.robotKind, RobotKind.INFANTRY),
 			heroMode = enumByOrdinal(payload.heroMode, HeroMode.MELEE),
+			heroMobilityMode = enumByOrdinal(payload.heroMobilityMode, HeroMobilityMode.REGULAR),
+			infantryMobilityMode = enumByOrdinal(payload.infantryMobilityMode, InfantryMobilityMode.REGULAR),
 			infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.POWER),
 			infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.BURST)
 		)
@@ -341,6 +401,7 @@ object RoboMinecraft : ModInitializer {
 		}
 		state.heat = 0.0
 		state.appliedMaxHp = 0
+		resetRobotLocomotionState(state)
 		nextShotTicks.remove(player.uuid)
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal("Robot configured: ${state.profile.displayName()}"), true)
@@ -375,26 +436,29 @@ object RoboMinecraft : ModInitializer {
 		state.enabled = enabled
 
 		if (enabled) {
+			resetRobotLocomotionState(state)
 			applyRobotAttributes(player, state, state.stats())
 			player.displayClientMessage(Component.literal("${statusLine(player)} | empty-hand left click fires | right click auto-aims"), true)
 		} else {
+			resetRobotLocomotionState(state)
 			removeRobotAttributes(player)
 			player.displayClientMessage(Component.literal("RoboMaster chassis offline."), true)
 		}
 	}
 
-	private fun setHero(context: CommandContext<CommandSourceStack>, mode: HeroMode): Int {
+	private fun setHero(context: CommandContext<CommandSourceStack>, mobilityMode: HeroMobilityMode, mode: HeroMode): Int {
 		val player = context.source.getPlayerOrException()
 		val state = stateFor(player)
 		val previousKind = state.profile.kind
 		state.enabled = true
-		state.profile = RobotProfile(kind = RobotKind.HERO, heroMode = mode)
+		state.profile = RobotProfile(kind = RobotKind.HERO, heroMode = mode, heroMobilityMode = mobilityMode)
 		if (previousKind != RobotKind.HERO) {
 			state.heroAmmo = 0
 			state.infantryAmmo = 0
 		}
 		state.heat = 0.0
 		state.appliedMaxHp = 0
+		resetRobotLocomotionState(state)
 		nextShotTicks.remove(player.uuid)
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal(statusLine(player)), false)
@@ -403,6 +467,7 @@ object RoboMinecraft : ModInitializer {
 
 	private fun setInfantry(
 		context: CommandContext<CommandSourceStack>,
+		mobilityMode: InfantryMobilityMode,
 		chassisMode: InfantryChassisMode,
 		launcherMode: InfantryLauncherMode
 	): Int {
@@ -412,6 +477,7 @@ object RoboMinecraft : ModInitializer {
 		state.enabled = true
 		state.profile = RobotProfile(
 			kind = RobotKind.INFANTRY,
+			infantryMobilityMode = mobilityMode,
 			infantryChassisMode = chassisMode,
 			infantryLauncherMode = launcherMode
 		)
@@ -421,6 +487,7 @@ object RoboMinecraft : ModInitializer {
 		}
 		state.heat = 0.0
 		state.appliedMaxHp = 0
+		resetRobotLocomotionState(state)
 		nextShotTicks.remove(player.uuid)
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal(statusLine(player)), false)
@@ -434,6 +501,7 @@ object RoboMinecraft : ModInitializer {
 		state.experience = max(state.experience, RobotRules.requiredExperienceForLevel(state.level))
 		state.heat = min(state.heat, state.stats().heatLimit.toDouble())
 		state.appliedMaxHp = 0
+		resetRobotLocomotionState(state)
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal(statusLine(player)), false)
 		return 1
@@ -446,6 +514,7 @@ object RoboMinecraft : ModInitializer {
 		state.level = RobotRules.levelForExperience(state.experience)
 		state.heat = min(state.heat, state.stats().heatLimit.toDouble())
 		state.appliedMaxHp = 0
+		resetRobotLocomotionState(state)
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal(statusLine(player)), false)
 		return 1
@@ -469,22 +538,24 @@ object RoboMinecraft : ModInitializer {
 		val stats = state.stats()
 		val status = if (state.enabled) "online" else "offline"
 
-		return "RoboMC $status | ${state.profile.displayName()} | Lv.${state.level} XP ${state.experience}/5000 | HP ${stats.maxHp} | Power ${stats.chassisPower}W | ${stats.physicalSpec.massKilograms.roundToInt()}kg | ${stats.movementSpeedMetersPerSecond.formatOneDecimal()}m/s | climb ${stats.physicalSpec.climbableStepHeightBlocks.formatOneDecimal()} blocks | Ammo ${state.ammoFor(state.profile.kind)} | Heat ${state.heat.roundToInt()}/${stats.heatLimit} | Cooling ${stats.heatCoolingPerSecond.roundToInt()}/s | Fire ${stats.fireRateHz.roundToInt()}Hz | Shot ${stats.bullet.name} ${stats.bullet.damage.roundToInt()}HP @ ${stats.bullet.muzzleVelocityMetersPerSecond.roundToInt()}m/s"
+		return "RoboMC $status | ${state.profile.displayName()} | Lv.${state.level} XP ${state.experience}/5000 | HP ${stats.maxHp} | Power ${stats.chassisPower}W | ${stats.physicalSpec.massKilograms.roundToInt()}kg | ${stats.movementSpeedMetersPerSecond.formatOneDecimal()}m/s | climb ${stats.stepHeightBlocks.formatOneDecimal()} blocks | jump ${stats.jumpHeightBlocks.formatOneDecimal()} blocks | Ammo ${state.ammoFor(state.profile.kind)} | Heat ${state.heat.roundToInt()}/${stats.heatLimit} | Cooling ${stats.heatCoolingPerSecond.roundToInt()}/s | Fire ${stats.fireRateHz.roundToInt()}Hz | Shot ${stats.bullet.name} ${stats.bullet.damage.roundToInt()}HP @ ${stats.bullet.muzzleVelocityMetersPerSecond.roundToInt()}m/s"
 	}
 
 	private fun applyRobotAttributes(player: LivingEntity, state: PilotState, stats: RobotStats) {
 		val maxHealth = stats.maxHp.toDouble()
 		val targetSpeedBlocksPerSecond = stats.movementSpeedMetersPerSecond * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
 		val baseSpeed = player.getAttributeBaseValue(Attributes.MOVEMENT_SPEED)
+		val baseJumpStrength = player.getAttributeBaseValue(Attributes.JUMP_STRENGTH).coerceAtLeast(1.0E-6)
 		val targetMovementAttribute = targetSpeedBlocksPerSecond / RobotConstants.VANILLA_BASE_SPEED_BLOCKS_PER_SECOND * 0.1
 		val movementBoost = targetMovementAttribute / baseSpeed - 1.0
+		val jumpStrengthBoost = stats.jumpStrength / baseJumpStrength - 1.0
 		val scaleBoost = stats.physicalSpec.heightBlocks / RobotConstants.PLAYER_BASE_HEIGHT_BLOCKS - 1.0
-		val stepHeightBoost = stats.physicalSpec.climbableStepHeightBlocks - player.getAttributeBaseValue(Attributes.STEP_HEIGHT)
+		val stepHeightBoost = stats.stepHeightBlocks - player.getAttributeBaseValue(Attributes.STEP_HEIGHT)
 
 		applyAttribute(player, Attributes.MAX_HEALTH, AttributeModifier(RobotAttributeIds.MAX_HEALTH, maxHealth - BASE_PLAYER_HEALTH, AttributeModifier.Operation.ADD_VALUE))
 		applyAttribute(player, Attributes.MOVEMENT_SPEED, AttributeModifier(RobotAttributeIds.MOVEMENT, movementBoost, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 		applyAttribute(player, Attributes.STEP_HEIGHT, AttributeModifier(RobotAttributeIds.STEP_HEIGHT, stepHeightBoost, AttributeModifier.Operation.ADD_VALUE))
-		applyAttribute(player, Attributes.JUMP_STRENGTH, AttributeModifier(RobotAttributeIds.JUMP_STRENGTH, -1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
+		applyAttribute(player, Attributes.JUMP_STRENGTH, AttributeModifier(RobotAttributeIds.JUMP_STRENGTH, jumpStrengthBoost, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 		applyAttribute(player, Attributes.ARMOR, AttributeModifier(RobotAttributeIds.ARMOR, -1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 		applyAttribute(player, Attributes.ARMOR_TOUGHNESS, AttributeModifier(RobotAttributeIds.ARMOR_TOUGHNESS, -1.0, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL))
 		applyAttribute(player, Attributes.KNOCKBACK_RESISTANCE, AttributeModifier(RobotAttributeIds.KNOCKBACK, 0.65, AttributeModifier.Operation.ADD_VALUE))
@@ -525,5 +596,56 @@ object RoboMinecraft : ModInitializer {
 
 	private inline fun <reified T : Enum<T>> enumByOrdinal(ordinal: Int, fallback: T): T {
 		return enumValues<T>().getOrElse(ordinal) { fallback }
+	}
+
+	private fun maintainRobotLocomotion(player: ServerPlayer, state: PilotState, stats: RobotStats) {
+		if (stats.stepPauseTicks <= 0) {
+			state.movementPauseTicks = 0
+			state.lastMovementY = player.y
+			state.lastMovementOnGround = player.onGround()
+			return
+		}
+
+		val currentY = player.y
+		val onGround = player.onGround()
+		val previousY = state.lastMovementY
+
+		if (previousY != null && state.lastMovementOnGround && onGround) {
+			val climbHeight = currentY - previousY
+			if (climbHeight >= DIRECT_CLIMB_TRIGGER_HEIGHT) {
+				state.movementPauseTicks = max(state.movementPauseTicks, stats.stepPauseTicks)
+				state.pauseLockX = player.x
+				state.pauseLockZ = player.z
+			}
+		}
+
+		if (state.movementPauseTicks > 0) {
+			val deltaMovement = player.deltaMovement
+			player.zza = 0.0f
+			player.xxa = 0.0f
+			player.setDeltaMovement(0.0, deltaMovement.y, 0.0)
+			val lockX = state.pauseLockX ?: player.x
+			val lockZ = state.pauseLockZ ?: player.z
+			player.setPos(lockX, player.y, lockZ)
+			state.movementPauseTicks--
+			if (state.movementPauseTicks <= 0) {
+				state.pauseLockX = null
+				state.pauseLockZ = null
+			}
+		} else {
+			state.pauseLockX = null
+			state.pauseLockZ = null
+		}
+
+		state.lastMovementY = currentY
+		state.lastMovementOnGround = onGround
+	}
+
+	private fun resetRobotLocomotionState(state: PilotState) {
+		state.movementPauseTicks = 0
+		state.lastMovementY = null
+		state.lastMovementOnGround = false
+		state.pauseLockX = null
+		state.pauseLockZ = null
 	}
 }
