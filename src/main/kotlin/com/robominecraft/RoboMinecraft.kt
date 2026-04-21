@@ -3,6 +3,7 @@ package com.robominecraft
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.fabricmc.api.ModInitializer
+import net.fabricmc.fabric.api.`object`.builder.v1.entity.FabricDefaultAttributeRegistry
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
@@ -10,12 +11,16 @@ import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking
+import net.minecraft.core.Registry
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.core.Holder
+import net.minecraft.core.registries.BuiltInRegistries
+import net.minecraft.core.registries.Registries
 import net.minecraft.core.particles.ParticleTypes
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.ResourceLocation
+import net.minecraft.resources.ResourceKey
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.sounds.SoundEvents
 import net.minecraft.sounds.SoundSource
@@ -37,6 +42,11 @@ object RoboMinecraft : ModInitializer {
 	const val MOD_ID = RobotConstants.MOD_ID
 
 	val ROBOT_SCALE_ID: ResourceLocation = RobotAttributeIds.SCALE
+	val ROBOT_VEHICLE_TYPE = Registry.register(
+		BuiltInRegistries.ENTITY_TYPE,
+		RobotConstants.id("robot_vehicle"),
+		RobotVehicleEntity.builder().build(ResourceKey.create(Registries.ENTITY_TYPE, RobotConstants.id("robot_vehicle")))
+	)
 
 	private const val COLLISION_DAMAGE = 2.0f
 	private const val COLLISION_COOLDOWN_TICKS = 20
@@ -44,14 +54,15 @@ object RoboMinecraft : ModInitializer {
 	private const val ROBOT_FOOD_LEVEL = 17
 	private const val ROBOT_SATURATION_LEVEL = 0.0f
 	private const val MAX_SHOTS_PER_REQUEST = 3
-	private const val DIRECT_CLIMB_TRIGGER_HEIGHT = 1.5
 
 	private val logger = LoggerFactory.getLogger(MOD_ID)
 	private val pilotStates = mutableMapOf<UUID, PilotState>()
+	private val robotVehicleIds = mutableMapOf<UUID, UUID>()
 	private val nextShotTicks = mutableMapOf<UUID, Double>()
 	private val lastCollisionTicks = mutableMapOf<UUID, Int>()
 
 	override fun onInitialize() {
+		FabricDefaultAttributeRegistry.register(ROBOT_VEHICLE_TYPE, RobotVehicleEntity.createAttributes())
 		registerNetworking()
 		registerAttackOverrides()
 		registerPlayerLifecycle()
@@ -102,6 +113,7 @@ object RoboMinecraft : ModInitializer {
 			val state = stateFor(newPlayer)
 			state.appliedMaxHp = 0
 			resetRobotLocomotionState(state)
+			discardRobotVehicle(newPlayer)
 
 			if (state.enabled) {
 				val stats = state.stats()
@@ -112,6 +124,27 @@ object RoboMinecraft : ModInitializer {
 	}
 
 	private fun registerRobotModeMaintenance() {
+		ServerTickEvents.START_SERVER_TICK.register { server ->
+			server.playerList.players.forEach { player ->
+				val state = stateFor(player)
+				val stats = state.stats()
+
+				if (state.enabled) {
+					val vehicle = ensureRobotVehicle(player, state, stats)
+					vehicle?.syncFromPilotState(player, state)
+					applyRobotAttributes(player, state, stats)
+					player.isInvisible = vehicle != null
+					maintainRobotVitals(player)
+				} else {
+					player.isInvisible = false
+					discardRobotVehicle(player)
+					resetRobotLocomotionState(state)
+					restorePlayerCollisionBox(player)
+					removeRobotAttributes(player)
+				}
+			}
+		}
+
 		ServerTickEvents.END_SERVER_TICK.register { server ->
 			server.playerList.players.forEach { player ->
 				val state = stateFor(player)
@@ -120,13 +153,7 @@ object RoboMinecraft : ModInitializer {
 				state.heat = max(0.0, state.heat - stats.heatCoolingPerSecond / 20.0)
 
 				if (state.enabled) {
-					maintainRobotLocomotion(player, state, stats)
-					applyRobotAttributes(player, state, stats)
-					maintainRobotVitals(player)
 					applyCollisionDamage(player)
-				} else {
-					resetRobotLocomotionState(state)
-					removeRobotAttributes(player)
 				}
 
 				syncRobotHud(player, state, stats)
@@ -333,7 +360,12 @@ object RoboMinecraft : ModInitializer {
 	}
 
 	private fun canHit(player: ServerPlayer, target: Entity): Boolean {
-		return target !== player && target.isAlive && !target.isSpectator && target.isPickable && target.canBeHitByProjectile()
+		return target !== player &&
+			target !is RobotVehicleEntity &&
+			target.isAlive &&
+			!target.isSpectator &&
+			target.isPickable &&
+			target.canBeHitByProjectile()
 	}
 
 	private fun maintainRobotVitals(player: ServerPlayer) {
@@ -350,8 +382,9 @@ object RoboMinecraft : ModInitializer {
 			return
 		}
 
+		val collider = robotVehicle(player) ?: player
 		val target = player.level()
-			.getEntities(player, player.boundingBox.inflate(0.18)) { target -> canHit(player, target) }
+			.getEntities(collider, collider.boundingBox.inflate(0.18)) { target -> canHit(player, target) }
 			.firstOrNull()
 			?: return
 
@@ -367,6 +400,7 @@ object RoboMinecraft : ModInitializer {
 		ServerPlayNetworking.send(
 			player,
 			RobotHudPayload(
+				enabled = state.enabled,
 				heat = if (state.enabled) state.heat.roundToInt() else 0,
 				heatLimit = if (state.enabled) stats.heatLimit else 0,
 				heroAmmo = state.heroAmmo,
@@ -440,6 +474,8 @@ object RoboMinecraft : ModInitializer {
 			applyRobotAttributes(player, state, state.stats())
 			player.displayClientMessage(Component.literal("${statusLine(player)} | empty-hand left click fires | right click auto-aims"), true)
 		} else {
+			player.isInvisible = false
+			discardRobotVehicle(player)
 			resetRobotLocomotionState(state)
 			removeRobotAttributes(player)
 			player.displayClientMessage(Component.literal("RoboMaster chassis offline."), true)
@@ -529,6 +565,10 @@ object RoboMinecraft : ModInitializer {
 		return pilotStates[player.uuid]?.enabled ?: true
 	}
 
+	fun robotStatsOrNull(entity: Entity): RobotStats? {
+		return if (isRobotPilot(entity)) stateFor(entity).stats() else null
+	}
+
 	private fun stateFor(player: Entity): PilotState {
 		return pilotStates.getOrPut(player.uuid) { PilotState() }
 	}
@@ -567,6 +607,10 @@ object RoboMinecraft : ModInitializer {
 		}
 	}
 
+	private fun restorePlayerCollisionBox(player: ServerPlayer) {
+		player.refreshDimensions()
+	}
+
 	private fun removeRobotAttributes(player: LivingEntity) {
 		removeAttribute(player, Attributes.MAX_HEALTH, RobotAttributeIds.MAX_HEALTH)
 		removeAttribute(player, Attributes.MOVEMENT_SPEED, RobotAttributeIds.MOVEMENT)
@@ -598,54 +642,63 @@ object RoboMinecraft : ModInitializer {
 		return enumValues<T>().getOrElse(ordinal) { fallback }
 	}
 
-	private fun maintainRobotLocomotion(player: ServerPlayer, state: PilotState, stats: RobotStats) {
-		if (stats.stepPauseTicks <= 0) {
-			state.movementPauseTicks = 0
-			state.lastMovementY = player.y
-			state.lastMovementOnGround = player.onGround()
-			return
+	private fun ensureRobotVehicle(player: ServerPlayer, state: PilotState, stats: RobotStats): RobotVehicleEntity? {
+		val existing = robotVehicle(player)
+		if (existing != null) {
+			existing.syncFromPilotState(player, state)
+			return existing
 		}
 
-		val currentY = player.y
-		val onGround = player.onGround()
-		val previousY = state.lastMovementY
-
-		if (previousY != null && state.lastMovementOnGround && onGround) {
-			val climbHeight = currentY - previousY
-			if (climbHeight >= DIRECT_CLIMB_TRIGGER_HEIGHT) {
-				state.movementPauseTicks = max(state.movementPauseTicks, stats.stepPauseTicks)
-				state.pauseLockX = player.x
-				state.pauseLockZ = player.z
-			}
-		}
-
-		if (state.movementPauseTicks > 0) {
-			val deltaMovement = player.deltaMovement
-			player.zza = 0.0f
-			player.xxa = 0.0f
-			player.setDeltaMovement(0.0, deltaMovement.y, 0.0)
-			val lockX = state.pauseLockX ?: player.x
-			val lockZ = state.pauseLockZ ?: player.z
-			player.setPos(lockX, player.y, lockZ)
-			state.movementPauseTicks--
-			if (state.movementPauseTicks <= 0) {
-				state.pauseLockX = null
-				state.pauseLockZ = null
-			}
+		val level = player.level() as net.minecraft.server.level.ServerLevel
+		val trackedVehicleId = robotVehicleIds[player.uuid]
+		val trackedVehicle = if (trackedVehicleId != null) {
+			level.getEntity(trackedVehicleId) as? RobotVehicleEntity
 		} else {
-			state.pauseLockX = null
-			state.pauseLockZ = null
+			null
+		}
+		if (trackedVehicle != null && trackedVehicle.isAlive) {
+			trackedVehicle.syncFromPilotState(player, state)
+			if (player.vehicle !== trackedVehicle) {
+				player.startRiding(trackedVehicle, true, true)
+			}
+			return trackedVehicle
 		}
 
-		state.lastMovementY = currentY
-		state.lastMovementOnGround = onGround
+		val vehicle = RobotVehicleEntity(ROBOT_VEHICLE_TYPE, level)
+		vehicle.snapTo(player.x, player.y, player.z, player.yRot, player.xRot)
+		vehicle.syncFromPilotState(player, state)
+		level.addFreshEntity(vehicle)
+		player.startRiding(vehicle, true, true)
+		robotVehicleIds[player.uuid] = vehicle.uuid
+		return vehicle
+	}
+
+	private fun discardRobotVehicle(player: ServerPlayer) {
+		val level = player.level() as net.minecraft.server.level.ServerLevel
+		val vehicle = robotVehicle(player)
+			?: robotVehicleIds[player.uuid]?.let { level.getEntity(it) as? RobotVehicleEntity }
+			?: return
+
+		if (player.vehicle === vehicle) {
+			player.stopRiding()
+		}
+		vehicle.remove(Entity.RemovalReason.DISCARDED)
+		robotVehicleIds.remove(player.uuid)
+	}
+
+	private fun robotVehicle(player: ServerPlayer): RobotVehicleEntity? {
+		return player.vehicle as? RobotVehicleEntity
 	}
 
 	private fun resetRobotLocomotionState(state: PilotState) {
 		state.movementPauseTicks = 0
 		state.lastMovementY = null
 		state.lastMovementOnGround = false
+		state.lastSafeX = null
+		state.lastSafeY = null
+		state.lastSafeZ = null
 		state.pauseLockX = null
+		state.pauseLockY = null
 		state.pauseLockZ = null
 	}
 }

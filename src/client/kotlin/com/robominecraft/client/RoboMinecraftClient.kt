@@ -9,22 +9,32 @@ import com.robominecraft.InfantryMobilityMode
 import com.robominecraft.RoboMinecraft
 import com.robominecraft.RobotHudPayload
 import com.robominecraft.RobotKind
+import com.robominecraft.RobotRules
+import com.mojang.math.Axis
 import com.mojang.blaze3d.platform.InputConstants
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
+import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
+import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
 import net.minecraft.client.player.LocalPlayer
+import net.minecraft.client.renderer.entity.NoopRenderer
+import net.minecraft.client.renderer.RenderType
+import net.minecraft.client.renderer.ShapeRenderer
+import net.minecraft.client.renderer.debug.DebugRenderer
 import net.minecraft.resources.ResourceLocation
+import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.ai.attributes.Attributes
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import kotlin.math.abs
 import kotlin.math.atan
@@ -46,11 +56,15 @@ object RoboMinecraftClient : ClientModInitializer {
 
 	private var shotCooldownTicks = 0
 	private var autoAimHasTarget = false
+	private var localCollisionBoxApplied = false
 
 	override fun onInitializeClient() {
+		EntityRendererRegistry.register(RoboMinecraft.ROBOT_VEHICLE_TYPE, ::NoopRenderer)
 		registerKeyMappings()
 		registerHudElements()
+		registerWorldRendering()
 		ClientPlayNetworking.registerGlobalReceiver(RobotHudPayload.ID) { payload, _ ->
+			RobotClientState.enabled = payload.enabled
 			RobotClientState.heat = payload.heat.coerceAtLeast(0)
 			RobotClientState.heatLimit = payload.heatLimit.coerceAtLeast(1)
 			RobotClientState.heroAmmo = payload.heroAmmo.coerceAtLeast(0)
@@ -62,6 +76,7 @@ object RoboMinecraftClient : ClientModInitializer {
 			RobotClientState.infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.POWER)
 			RobotClientState.infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.BURST)
 		}
+		ClientTickEvents.START_CLIENT_TICK.register(::tickLocalCollisionBox)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickAutoAim)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickShootingInput)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickScreenKeys)
@@ -75,6 +90,29 @@ object RoboMinecraftClient : ClientModInitializer {
 			ResourceLocation.fromNamespaceAndPath(RoboMinecraft.MOD_ID, "robot_hud"),
 			::renderRobotHud
 		)
+	}
+
+	private fun registerWorldRendering() {
+		WorldRenderEvents.AFTER_ENTITIES.register { context ->
+			val client = Minecraft.getInstance()
+			val level = client.level ?: return@register
+			val matrices = context.matrices()
+			val consumers = context.consumers() ?: return@register
+			val cameraPos = client.gameRenderer.mainCamera.position
+			val firstPerson = client.options.cameraType.isFirstPerson
+
+			level.players().forEach { player ->
+				if (!isRobotModeActive(player)) {
+					return@forEach
+				}
+				if (player == client.player && firstPerson) {
+					return@forEach
+				}
+
+				val spec = robotPhysicalSpec(player) ?: return@forEach
+				renderRobotHull(matrices, consumers, player, cameraPos, spec, player == client.player)
+			}
+		}
 	}
 
 	private fun registerKeyMappings() {
@@ -150,6 +188,22 @@ object RoboMinecraftClient : ClientModInitializer {
 				client.setScreen(AmmoPurchaseScreen(RobotKind.HERO))
 			}
 		}
+	}
+
+	private fun tickLocalCollisionBox(client: Minecraft) {
+		val player = client.player ?: return
+		val spec = if (isRobotModeActive(player)) robotPhysicalSpec(player) else null
+
+		if (spec == null) {
+			if (localCollisionBoxApplied) {
+				player.refreshDimensions()
+				localCollisionBoxApplied = false
+			}
+			return
+		}
+
+		player.setBoundingBox(spec.collisionBoxAt(player.x, player.y, player.z, player.yBodyRot))
+		localCollisionBoxApplied = true
 	}
 
 	private fun renderRobotHud(context: GuiGraphics, @Suppress("UNUSED_PARAMETER") tickCounter: net.minecraft.client.DeltaTracker) {
@@ -245,6 +299,39 @@ object RoboMinecraftClient : ClientModInitializer {
 			0xFFE8F7FF.toInt(),
 			false
 		)
+	}
+
+	private fun renderRobotHull(
+		matrices: com.mojang.blaze3d.vertex.PoseStack,
+		consumers: net.minecraft.client.renderer.MultiBufferSource,
+		player: Player,
+		cameraPos: Vec3,
+		spec: com.robominecraft.RobotPhysicalSpec,
+		isLocalPlayer: Boolean
+	) {
+		val halfWidth = spec.widthBlocks / 2.0
+		val halfLength = spec.lengthBlocks / 2.0
+		val modelBox = AABB(-halfWidth, 0.0, -halfLength, halfWidth, spec.collisionHeightBlocks, halfLength)
+		val fillColor = if (RobotRules.inferKindFromScale(player.getAttributeValue(Attributes.SCALE)) == RobotKind.HERO) {
+			floatArrayOf(0.75f, 0.26f, 0.22f, if (isLocalPlayer) 0.35f else 0.55f)
+		} else {
+			floatArrayOf(0.18f, 0.64f, 0.82f, if (isLocalPlayer) 0.35f else 0.55f)
+		}
+
+		matrices.pushPose()
+		matrices.translate(player.x - cameraPos.x, player.y - cameraPos.y, player.z - cameraPos.z)
+		matrices.mulPose(Axis.YP.rotationDegrees(-player.yBodyRot))
+		DebugRenderer.renderFilledBox(matrices, consumers, modelBox, fillColor[0], fillColor[1], fillColor[2], fillColor[3])
+		ShapeRenderer.renderLineBox(
+			matrices.last(),
+			consumers.getBuffer(RenderType.lines()),
+			modelBox,
+			0.95f,
+			0.95f,
+			0.95f,
+			if (isLocalPlayer) 0.55f else 0.9f
+		)
+		matrices.popPose()
 	}
 
 	private fun findAutoAimTarget(client: Minecraft, player: LocalPlayer): AimTarget? {
@@ -372,8 +459,28 @@ object RoboMinecraftClient : ClientModInitializer {
 
 	private fun isRobotModeActive(): Boolean {
 		val player = Minecraft.getInstance().player ?: return false
+		return isRobotModeActive(player)
+	}
+
+	private fun isRobotModeActive(player: Player): Boolean {
+		if (player == Minecraft.getInstance().player) {
+			return RobotClientState.enabled
+		}
 		val scale = player.getAttribute(Attributes.SCALE) ?: return false
 		return scale.hasModifier(RoboMinecraft.ROBOT_SCALE_ID)
+	}
+
+	private fun robotPhysicalSpec(player: Player): com.robominecraft.RobotPhysicalSpec? {
+		if (!isRobotModeActive(player)) {
+			return null
+		}
+
+		val kind = if (player == Minecraft.getInstance().player) {
+			RobotClientState.robotKind
+		} else {
+			RobotRules.inferKindFromScale(player.getAttributeValue(Attributes.SCALE))
+		}
+		return RobotRules.physicalSpec(kind)
 	}
 
 	private inline fun <reified T : Enum<T>> enumByOrdinal(ordinal: Int, fallback: T): T {
@@ -388,6 +495,7 @@ object RoboMinecraftClient : ClientModInitializer {
 }
 
 object RobotClientState {
+	var enabled: Boolean = true
 	var heat: Int = 0
 	var heatLimit: Int = 1
 	var heroAmmo: Int = 0

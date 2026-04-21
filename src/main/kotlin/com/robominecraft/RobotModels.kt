@@ -1,7 +1,12 @@
 package com.robominecraft
 
 import net.minecraft.resources.ResourceLocation
+import net.minecraft.world.phys.AABB
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 object RobotConstants {
@@ -77,11 +82,42 @@ data class RobotPhysicalSpec(
 	val heightBlocks: Double
 		get() = heightMeters * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
 
+	val collisionHeightMeters: Double
+		get() = max(0.1, heightMeters - 0.1)
+
+	val collisionHeightBlocks: Double
+		get() = collisionHeightMeters * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
+
+	val lengthBlocks: Double
+		get() = lengthMeters * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
+
+	val widthBlocks: Double
+		get() = widthMeters * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
+
 	val climbableStepHeightBlocks: Double
 		get() = RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS
 
 	fun displayDimensions(): String {
 		return "${lengthMeters}m x ${widthMeters}m x ${heightMeters}m"
+	}
+
+	fun collisionBoxAt(x: Double, y: Double, z: Double, yawDegrees: Float): AABB {
+		val halfWidth = widthBlocks / 2.0
+		val halfLength = lengthBlocks / 2.0
+		val yawRadians = Math.toRadians(yawDegrees.toDouble())
+		val cosYaw = abs(cos(yawRadians))
+		val sinYaw = abs(sin(yawRadians))
+		val halfExtentX = cosYaw * halfWidth + sinYaw * halfLength
+		val halfExtentZ = sinYaw * halfWidth + cosYaw * halfLength
+
+		return AABB(
+			x - halfExtentX,
+			y,
+			z - halfExtentZ,
+			x + halfExtentX,
+			y + collisionHeightBlocks,
+			z + halfExtentZ
+		)
 	}
 }
 
@@ -127,7 +163,11 @@ data class PilotState(
 	var movementPauseTicks: Int = 0,
 	var lastMovementY: Double? = null,
 	var lastMovementOnGround: Boolean = false,
+	var lastSafeX: Double? = null,
+	var lastSafeY: Double? = null,
+	var lastSafeZ: Double? = null,
 	var pauseLockX: Double? = null,
+	var pauseLockY: Double? = null,
 	var pauseLockZ: Double? = null,
 	var heroAmmo: Int = 0,
 	var infantryAmmo: Int = 0
@@ -211,6 +251,19 @@ object RobotRules {
 			RobotKind.HERO -> heroStats(level, profile.heroMobilityMode, profile.heroMode)
 			RobotKind.INFANTRY -> infantryStats(level, profile.infantryMobilityMode, profile.infantryChassisMode, profile.infantryLauncherMode)
 		}
+	}
+
+	fun physicalSpec(kind: RobotKind): RobotPhysicalSpec {
+		return when (kind) {
+			RobotKind.HERO -> heroPhysicalSpec
+			RobotKind.INFANTRY -> infantryPhysicalSpec
+		}
+	}
+
+	fun inferKindFromScale(scale: Double): RobotKind {
+		val heroScale = heroPhysicalSpec.heightBlocks / RobotConstants.PLAYER_BASE_HEIGHT_BLOCKS
+		val infantryScale = infantryPhysicalSpec.heightBlocks / RobotConstants.PLAYER_BASE_HEIGHT_BLOCKS
+		return if (abs(scale - heroScale) <= abs(scale - infantryScale)) RobotKind.HERO else RobotKind.INFANTRY
 	}
 
 	fun requiredExperienceForLevel(level: Int): Int {

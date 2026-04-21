@@ -15,6 +15,7 @@ object FireBlasterPayload : CustomPacketPayload {
 }
 
 data class RobotHudPayload(
+	val enabled: Boolean,
 	val heat: Int,
 	val heatLimit: Int,
 	val heroAmmo: Int,
@@ -34,6 +35,7 @@ data class RobotHudPayload(
 		val ID: CustomPacketPayload.Type<RobotHudPayload> = CustomPacketPayload.Type(RobotConstants.id("robot_hud"))
 		val CODEC: StreamCodec<RegistryFriendlyByteBuf, RobotHudPayload> = StreamCodec.of(
 			{ buffer, payload ->
+				ByteBufCodecs.BOOL.encode(buffer, payload.enabled)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heat)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heatLimit)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroAmmo)
@@ -47,6 +49,7 @@ data class RobotHudPayload(
 			},
 			{ buffer ->
 				RobotHudPayload(
+					enabled = ByteBufCodecs.BOOL.decode(buffer),
 					heat = ByteBufCodecs.VAR_INT.decode(buffer),
 					heatLimit = ByteBufCodecs.VAR_INT.decode(buffer),
 					heroAmmo = ByteBufCodecs.VAR_INT.decode(buffer),
