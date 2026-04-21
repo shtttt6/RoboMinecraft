@@ -36,11 +36,12 @@ object RobotProjectiles {
 		val radiusBlocks = radius * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
 		val crossSectionArea = Math.PI * radius * radius
 		val dragFactor = 0.5 * AIR_DENSITY_KG_PER_CUBIC_METER * SPHERE_DRAG_COEFFICIENT * crossSectionArea / bullet.massKilograms
-		var previousPosition = player.eyePosition
+		val origin = muzzleOrigin(player)
+		var previousPosition = origin
 		var velocity = player.lookAngle.normalize().scale(bullet.muzzleVelocityMetersPerSecond)
 		val trail = mutableListOf(previousPosition)
 
-		while (previousPosition.distanceTo(player.eyePosition) < PROJECTILE_FAILSAFE_MAX_DISTANCE_BLOCKS) {
+		while (previousPosition.distanceTo(origin) < PROJECTILE_FAILSAFE_MAX_DISTANCE_BLOCKS) {
 			val speed = velocity.length()
 			val dragAcceleration = if (speed > 0.0) {
 				velocity.normalize().scale(-dragFactor * speed * speed)
@@ -78,6 +79,15 @@ object RobotProjectiles {
 		}
 
 		return ProjectileShot(previousPosition, null, velocity, trail)
+	}
+
+	private fun muzzleOrigin(player: ServerPlayer): Vec3 {
+		val stats = RoboMinecraft.robotStatsOrNull(player) ?: return player.eyePosition
+		if (!RoboMinecraft.isAerialRobot(player)) {
+			return player.eyePosition
+		}
+		val vehicle = player.vehicle as? RobotVehicleEntity ?: return player.eyePosition
+		return Vec3(vehicle.x, vehicle.y + stats.physicalSpec.viewHeightBlocks, vehicle.z)
 	}
 
 	fun spawnTrail(player: ServerPlayer, trail: List<Vec3>) {

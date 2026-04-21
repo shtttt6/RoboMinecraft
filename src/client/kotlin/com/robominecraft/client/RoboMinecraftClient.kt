@@ -1,5 +1,6 @@
 package com.robominecraft.client
 
+import com.robominecraft.AerialControlPayload
 import com.robominecraft.FireBlasterPayload
 import com.robominecraft.HeroMode
 import com.robominecraft.HeroMobilityMode
@@ -10,6 +11,7 @@ import com.robominecraft.RoboMinecraft
 import com.robominecraft.RobotHudPayload
 import com.robominecraft.RobotKind
 import com.robominecraft.RobotRules
+import com.robominecraft.RobotVehicleEntity
 import com.mojang.math.Axis
 import com.mojang.blaze3d.platform.InputConstants
 import net.fabricmc.api.ClientModInitializer
@@ -53,10 +55,17 @@ object RoboMinecraftClient : ClientModInitializer {
 	private lateinit var configKey: KeyMapping
 	private lateinit var buyInfantryAmmoKey: KeyMapping
 	private lateinit var buyHeroAmmoKey: KeyMapping
+	private lateinit var aerialFlightToggleKey: KeyMapping
+	private lateinit var aerialAscendKey: KeyMapping
+	private lateinit var aerialDescendKey: KeyMapping
 
 	private var shotCooldownTicks = 0
 	private var autoAimHasTarget = false
 	private var localCollisionBoxApplied = false
+	private var localAerialFlightMode = false
+	private var lastSentAerialFlightMode = false
+	private var lastSentAerialAscending = false
+	private var lastSentAerialDescending = false
 
 	override fun onInitializeClient() {
 		EntityRendererRegistry.register(RoboMinecraft.ROBOT_VEHICLE_TYPE, ::NoopRenderer)
@@ -69,7 +78,14 @@ object RoboMinecraftClient : ClientModInitializer {
 			RobotClientState.heatLimit = payload.heatLimit.coerceAtLeast(1)
 			RobotClientState.heroAmmo = payload.heroAmmo.coerceAtLeast(0)
 			RobotClientState.infantryAmmo = payload.infantryAmmo.coerceAtLeast(0)
+			RobotClientState.aerialAmmo = payload.aerialAmmo.coerceAtLeast(0)
+			RobotClientState.aerialFlightMode = payload.aerialFlightMode
 			RobotClientState.robotKind = enumByOrdinal(payload.robotKind, RobotKind.INFANTRY)
+			if (RobotClientState.robotKind != RobotKind.AERIAL) {
+				localAerialFlightMode = false
+			} else if (payload.aerialFlightMode == lastSentAerialFlightMode) {
+				localAerialFlightMode = payload.aerialFlightMode
+			}
 			RobotClientState.heroMode = enumByOrdinal(payload.heroMode, HeroMode.MELEE)
 			RobotClientState.heroMobilityMode = enumByOrdinal(payload.heroMobilityMode, HeroMobilityMode.REGULAR)
 			RobotClientState.infantryMobilityMode = enumByOrdinal(payload.infantryMobilityMode, InfantryMobilityMode.REGULAR)
@@ -78,6 +94,7 @@ object RoboMinecraftClient : ClientModInitializer {
 		}
 		ClientTickEvents.START_CLIENT_TICK.register(::tickLocalCollisionBox)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickAutoAim)
+		ClientTickEvents.END_CLIENT_TICK.register(::tickAerialControls)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickShootingInput)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickScreenKeys)
 	}
@@ -124,6 +141,15 @@ object RoboMinecraftClient : ClientModInitializer {
 		)
 		buyHeroAmmoKey = KeyBindingHelper.registerKeyBinding(
 			KeyMapping("key.robominecraft.buy_hero_ammo", InputConstants.Type.KEYSYM, InputConstants.KEY_I, KeyMapping.Category.MISC)
+		)
+		aerialFlightToggleKey = KeyBindingHelper.registerKeyBinding(
+			KeyMapping("key.robominecraft.aerial_flight_toggle", InputConstants.Type.KEYSYM, InputConstants.KEY_G, KeyMapping.Category.MISC)
+		)
+		aerialAscendKey = KeyBindingHelper.registerKeyBinding(
+			KeyMapping("key.robominecraft.aerial_ascend", InputConstants.Type.KEYSYM, InputConstants.KEY_SPACE, KeyMapping.Category.MISC)
+		)
+		aerialDescendKey = KeyBindingHelper.registerKeyBinding(
+			KeyMapping("key.robominecraft.aerial_descend", InputConstants.Type.KEYSYM, InputConstants.KEY_LALT, KeyMapping.Category.MISC)
 		)
 	}
 
@@ -190,6 +216,37 @@ object RoboMinecraftClient : ClientModInitializer {
 		}
 	}
 
+	private fun tickAerialControls(client: Minecraft) {
+		val player = client.player
+		val active = player != null &&
+			isRobotModeActive(player) &&
+			RobotClientState.robotKind == RobotKind.AERIAL
+		if (active) {
+			while (aerialFlightToggleKey.consumeClick()) {
+				localAerialFlightMode = !localAerialFlightMode
+			}
+		} else {
+			localAerialFlightMode = false
+		}
+		val ascending = active && localAerialFlightMode && aerialAscendKey.isDown
+		val descending = active && localAerialFlightMode && aerialDescendKey.isDown
+
+		if (
+			localAerialFlightMode == lastSentAerialFlightMode &&
+			ascending == lastSentAerialAscending &&
+			descending == lastSentAerialDescending
+		) {
+			return
+		}
+
+		if (ClientPlayNetworking.canSend(AerialControlPayload.ID)) {
+			ClientPlayNetworking.send(AerialControlPayload(localAerialFlightMode, ascending, descending))
+			lastSentAerialFlightMode = localAerialFlightMode
+			lastSentAerialAscending = ascending
+			lastSentAerialDescending = descending
+		}
+	}
+
 	private fun tickLocalCollisionBox(client: Minecraft) {
 		val player = client.player ?: return
 		val spec = if (isRobotModeActive(player)) robotPhysicalSpec(player) else null
@@ -202,7 +259,8 @@ object RoboMinecraftClient : ClientModInitializer {
 			return
 		}
 
-		player.setBoundingBox(spec.collisionBoxAt(player.x, player.y, player.z, player.yBodyRot))
+		val collider = player.vehicle as? RobotVehicleEntity ?: player
+		player.setBoundingBox(spec.collisionBoxAt(collider.x, collider.y, collider.z, collider.yBodyRot))
 		localCollisionBoxApplied = true
 	}
 
@@ -267,7 +325,11 @@ object RoboMinecraftClient : ClientModInitializer {
 
 	private fun renderAmmoCounter(context: GuiGraphics, client: Minecraft, width: Int) {
 		val bulletName = if (RobotClientState.robotKind == RobotKind.HERO) "42mm" else "17mm"
-		val text = "$bulletName x${RobotClientState.currentAmmo()}"
+		val text = if (RobotClientState.robotKind == RobotKind.AERIAL) {
+			"$bulletName x${RobotClientState.currentAmmo()} | ${if (localAerialFlightMode) "FLIGHT" else "FALL"}"
+		} else {
+			"$bulletName x${RobotClientState.currentAmmo()}"
+		}
 		val x = width - client.font.width(text) - 8
 		val y = 8
 		val color = if (RobotClientState.currentAmmo() > 0) 0xFFE8F7FF.toInt() else 0xFFFF6060.toInt()
@@ -277,6 +339,10 @@ object RoboMinecraftClient : ClientModInitializer {
 	}
 
 	private fun renderHealthBar(context: GuiGraphics, client: Minecraft, player: net.minecraft.client.player.LocalPlayer, height: Int) {
+		if (RobotClientState.robotKind == RobotKind.AERIAL) {
+			return
+		}
+
 		val maxHealth = player.getAttributeValue(Attributes.MAX_HEALTH).toFloat().coerceAtLeast(1.0f)
 		val healthProgress = (player.health / maxHealth).coerceIn(0.0f, 1.0f)
 		val barX = 8
@@ -312,10 +378,11 @@ object RoboMinecraftClient : ClientModInitializer {
 		val halfWidth = spec.widthBlocks / 2.0
 		val halfLength = spec.lengthBlocks / 2.0
 		val modelBox = AABB(-halfWidth, 0.0, -halfLength, halfWidth, spec.collisionHeightBlocks, halfLength)
-		val fillColor = if (RobotRules.inferKindFromScale(player.getAttributeValue(Attributes.SCALE)) == RobotKind.HERO) {
-			floatArrayOf(0.75f, 0.26f, 0.22f, if (isLocalPlayer) 0.35f else 0.55f)
-		} else {
-			floatArrayOf(0.18f, 0.64f, 0.82f, if (isLocalPlayer) 0.35f else 0.55f)
+		val kind = robotKindFor(player)
+		val fillColor = when (kind) {
+			RobotKind.HERO -> floatArrayOf(0.75f, 0.26f, 0.22f, if (isLocalPlayer) 0.35f else 0.55f)
+			RobotKind.INFANTRY -> floatArrayOf(0.18f, 0.64f, 0.82f, if (isLocalPlayer) 0.35f else 0.55f)
+			RobotKind.AERIAL -> floatArrayOf(0.95f, 0.84f, 0.28f, if (isLocalPlayer) 0.35f else 0.55f)
 		}
 
 		matrices.pushPose()
@@ -337,7 +404,7 @@ object RoboMinecraftClient : ClientModInitializer {
 	private fun findAutoAimTarget(client: Minecraft, player: LocalPlayer): AimTarget? {
 		val level = player.level()
 		val searchBox = player.boundingBox.inflate(AIM_ASSIST_RANGE_BLOCKS)
-		val eyePosition = player.eyePosition
+		val eyePosition = pilotViewPosition(player)
 		val frameAngles = aimFrameAngles(client)
 		var bestTarget: AimTarget? = null
 
@@ -408,7 +475,7 @@ object RoboMinecraftClient : ClientModInitializer {
 	}
 
 	private fun aimAt(player: LocalPlayer, point: Vec3) {
-		val rotation = rotationFromTo(player.eyePosition, point) ?: return
+		val rotation = rotationFromTo(pilotViewPosition(player), point) ?: return
 		val yaw = rotation.yaw.toFloat()
 		val pitch = rotation.pitch.coerceIn(-90.0, 90.0).toFloat()
 
@@ -475,12 +542,29 @@ object RoboMinecraftClient : ClientModInitializer {
 			return null
 		}
 
-		val kind = if (player == Minecraft.getInstance().player) {
-			RobotClientState.robotKind
-		} else {
-			RobotRules.inferKindFromScale(player.getAttributeValue(Attributes.SCALE))
+		return RobotRules.physicalSpec(robotKindFor(player))
+	}
+
+	private fun robotKindFor(player: Player): RobotKind {
+		if (player == Minecraft.getInstance().player) {
+			return RobotClientState.robotKind
 		}
-		return RobotRules.physicalSpec(kind)
+
+		val vehicleKind = (player.vehicle as? RobotVehicleEntity)?.robotKind()
+		if (vehicleKind != null) {
+			return vehicleKind
+		}
+
+		return RobotRules.inferKindFromScale(player.getAttributeValue(Attributes.SCALE))
+	}
+
+	private fun pilotViewPosition(player: Player): Vec3 {
+		if (robotKindFor(player) != RobotKind.AERIAL) {
+			return player.eyePosition
+		}
+		val vehicle = player.vehicle as? RobotVehicleEntity ?: return player.eyePosition
+		val spec = robotPhysicalSpec(player) ?: return player.eyePosition
+		return Vec3(vehicle.x, vehicle.y + spec.viewHeightBlocks, vehicle.z)
 	}
 
 	private inline fun <reified T : Enum<T>> enumByOrdinal(ordinal: Int, fallback: T): T {
@@ -500,6 +584,8 @@ object RobotClientState {
 	var heatLimit: Int = 1
 	var heroAmmo: Int = 0
 	var infantryAmmo: Int = 0
+	var aerialAmmo: Int = 0
+	var aerialFlightMode: Boolean = false
 	var robotKind: RobotKind = RobotKind.INFANTRY
 	var heroMode: HeroMode = HeroMode.MELEE
 	var heroMobilityMode: HeroMobilityMode = HeroMobilityMode.REGULAR
@@ -515,6 +601,7 @@ object RobotClientState {
 		return when (kind) {
 			RobotKind.HERO -> heroAmmo
 			RobotKind.INFANTRY -> infantryAmmo
+			RobotKind.AERIAL -> aerialAmmo
 		}
 	}
 }

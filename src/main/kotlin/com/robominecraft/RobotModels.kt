@@ -36,7 +36,8 @@ object RobotAttributeIds {
 
 enum class RobotKind(val displayName: String) {
 	HERO("Hero"),
-	INFANTRY("Infantry")
+	INFANTRY("Infantry"),
+	AERIAL("Aerial")
 }
 
 enum class HeroMode(val displayName: String) {
@@ -77,7 +78,8 @@ data class RobotPhysicalSpec(
 	val lengthMeters: Double,
 	val widthMeters: Double,
 	val heightMeters: Double,
-	val massKilograms: Double
+	val massKilograms: Double,
+	val viewHeightMeters: Double = heightMeters * 0.75
 ) {
 	val heightBlocks: Double
 		get() = heightMeters * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
@@ -96,6 +98,9 @@ data class RobotPhysicalSpec(
 
 	val climbableStepHeightBlocks: Double
 		get() = RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS
+
+	val viewHeightBlocks: Double
+		get() = viewHeightMeters * RobotConstants.WORLD_BLOCKS_PER_REAL_METER
 
 	fun displayDimensions(): String {
 		return "${lengthMeters}m x ${widthMeters}m x ${heightMeters}m"
@@ -149,6 +154,7 @@ data class RobotProfile(
 		return when (kind) {
 			RobotKind.HERO -> "${kind.displayName} ${heroMobilityMode.displayName} ${heroMode.displayName}"
 			RobotKind.INFANTRY -> "${kind.displayName} ${infantryMobilityMode.displayName} ${infantryChassisMode.displayName}/${infantryLauncherMode.displayName}"
+			RobotKind.AERIAL -> kind.displayName
 		}
 	}
 }
@@ -170,7 +176,11 @@ data class PilotState(
 	var pauseLockY: Double? = null,
 	var pauseLockZ: Double? = null,
 	var heroAmmo: Int = 0,
-	var infantryAmmo: Int = 0
+	var infantryAmmo: Int = 0,
+	var aerialAmmo: Int = 0,
+	var aerialFlightMode: Boolean = false,
+	var aerialAscending: Boolean = false,
+	var aerialDescending: Boolean = false
 ) {
 	fun stats(): RobotStats {
 		return RobotRules.stats(profile, level)
@@ -180,6 +190,7 @@ data class PilotState(
 		return when (kind) {
 			RobotKind.HERO -> heroAmmo
 			RobotKind.INFANTRY -> infantryAmmo
+			RobotKind.AERIAL -> aerialAmmo
 		}
 	}
 
@@ -191,6 +202,7 @@ data class PilotState(
 		when (kind) {
 			RobotKind.HERO -> heroAmmo = (heroAmmo + amount).coerceAtMost(RobotConstants.MAX_AMMO_PER_TYPE)
 			RobotKind.INFANTRY -> infantryAmmo = (infantryAmmo + amount).coerceAtMost(RobotConstants.MAX_AMMO_PER_TYPE)
+			RobotKind.AERIAL -> aerialAmmo = (aerialAmmo + amount).coerceAtMost(RobotConstants.MAX_AMMO_PER_TYPE)
 		}
 	}
 
@@ -212,11 +224,21 @@ data class PilotState(
 					true
 				}
 			}
+			RobotKind.AERIAL -> {
+				if (aerialAmmo <= 0) {
+					false
+				} else {
+					aerialAmmo--
+					true
+				}
+			}
 		}
 	}
 }
 
 object RobotRules {
+	const val AERIAL_INITIAL_AMMO = 750
+
 	private val infantryPhysicalSpec = RobotPhysicalSpec(
 		lengthMeters = 0.6,
 		widthMeters = 0.5,
@@ -228,6 +250,13 @@ object RobotRules {
 		widthMeters = 0.6,
 		heightMeters = 0.6,
 		massKilograms = 25.0
+	)
+	private val aerialPhysicalSpec = RobotPhysicalSpec(
+		lengthMeters = 1.4,
+		widthMeters = 1.4,
+		heightMeters = 0.6,
+		massKilograms = 18.0,
+		viewHeightMeters = 0.1
 	)
 	private val infantryBullet = BulletSpec(
 		name = "17mm",
@@ -250,6 +279,7 @@ object RobotRules {
 		return when (profile.kind) {
 			RobotKind.HERO -> heroStats(level, profile.heroMobilityMode, profile.heroMode)
 			RobotKind.INFANTRY -> infantryStats(level, profile.infantryMobilityMode, profile.infantryChassisMode, profile.infantryLauncherMode)
+			RobotKind.AERIAL -> aerialStats(level)
 		}
 	}
 
@@ -257,6 +287,7 @@ object RobotRules {
 		return when (kind) {
 			RobotKind.HERO -> heroPhysicalSpec
 			RobotKind.INFANTRY -> infantryPhysicalSpec
+			RobotKind.AERIAL -> aerialPhysicalSpec
 		}
 	}
 
@@ -378,6 +409,28 @@ object RobotRules {
 			jumpStrength = jumpStrength,
 			jumpHeightBlocks = jumpHeightBlocks,
 			stepPauseTicks = stepPauseTicks
+		)
+	}
+
+	private fun aerialStats(level: Int): RobotStats {
+		val safeLevel = level.coerceIn(1, 10)
+		val heatLimitByLevel = intArrayOf(100, 110, 120, 130, 140, 150, 160, 170, 180, 200)
+		val coolingByLevel = doubleArrayOf(20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0)
+
+		return RobotStats(
+			maxHp = 1,
+			chassisPower = 220,
+			heatLimit = heatLimitByLevel[safeLevel - 1],
+			heatCoolingPerSecond = coolingByLevel[safeLevel - 1],
+			shotHeat = 10.0,
+			fireRateHz = 25.0,
+			bullet = infantryBullet,
+			physicalSpec = aerialPhysicalSpec,
+			movementSpeedMetersPerSecond = 3.5,
+			stepHeightBlocks = 0.0,
+			jumpStrength = 0.0,
+			jumpHeightBlocks = 0.0,
+			stepPauseTicks = 0
 		)
 	}
 

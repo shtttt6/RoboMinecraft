@@ -20,6 +20,8 @@ data class RobotHudPayload(
 	val heatLimit: Int,
 	val heroAmmo: Int,
 	val infantryAmmo: Int,
+	val aerialAmmo: Int,
+	val aerialFlightMode: Boolean,
 	val robotKind: Int,
 	val heroMode: Int,
 	val heroMobilityMode: Int,
@@ -40,6 +42,8 @@ data class RobotHudPayload(
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heatLimit)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroAmmo)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.infantryAmmo)
+				ByteBufCodecs.VAR_INT.encode(buffer, payload.aerialAmmo)
+				ByteBufCodecs.BOOL.encode(buffer, payload.aerialFlightMode)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.robotKind)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroMode)
 				ByteBufCodecs.VAR_INT.encode(buffer, payload.heroMobilityMode)
@@ -54,6 +58,8 @@ data class RobotHudPayload(
 					heatLimit = ByteBufCodecs.VAR_INT.decode(buffer),
 					heroAmmo = ByteBufCodecs.VAR_INT.decode(buffer),
 					infantryAmmo = ByteBufCodecs.VAR_INT.decode(buffer),
+					aerialAmmo = ByteBufCodecs.VAR_INT.decode(buffer),
+					aerialFlightMode = ByteBufCodecs.BOOL.decode(buffer),
 					robotKind = ByteBufCodecs.VAR_INT.decode(buffer),
 					heroMode = ByteBufCodecs.VAR_INT.decode(buffer),
 					heroMobilityMode = ByteBufCodecs.VAR_INT.decode(buffer),
@@ -62,6 +68,29 @@ data class RobotHudPayload(
 					infantryLauncherMode = ByteBufCodecs.VAR_INT.decode(buffer)
 				)
 			}
+		)
+	}
+}
+
+data class AerialControlPayload(
+	val flightMode: Boolean,
+	val ascending: Boolean,
+	val descending: Boolean
+) : CustomPacketPayload {
+	override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> {
+		return ID
+	}
+
+	companion object {
+		val ID: CustomPacketPayload.Type<AerialControlPayload> = CustomPacketPayload.Type(RobotConstants.id("aerial_control"))
+		val CODEC: StreamCodec<RegistryFriendlyByteBuf, AerialControlPayload> = StreamCodec.composite(
+			ByteBufCodecs.BOOL,
+			AerialControlPayload::flightMode,
+			ByteBufCodecs.BOOL,
+			AerialControlPayload::ascending,
+			ByteBufCodecs.BOOL,
+			AerialControlPayload::descending,
+			::AerialControlPayload
 		)
 	}
 }

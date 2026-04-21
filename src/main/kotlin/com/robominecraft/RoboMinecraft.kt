@@ -6,6 +6,7 @@ import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.`object`.builder.v1.entity.FabricDefaultAttributeRegistry
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
@@ -54,6 +55,7 @@ object RoboMinecraft : ModInitializer {
 	private const val ROBOT_FOOD_LEVEL = 17
 	private const val ROBOT_SATURATION_LEVEL = 0.0f
 	private const val MAX_SHOTS_PER_REQUEST = 3
+	private const val HEAT_SETTLEMENT_INTERVAL_TICKS = 2
 
 	private val logger = LoggerFactory.getLogger(MOD_ID)
 	private val pilotStates = mutableMapOf<UUID, PilotState>()
@@ -65,6 +67,7 @@ object RoboMinecraft : ModInitializer {
 		FabricDefaultAttributeRegistry.register(ROBOT_VEHICLE_TYPE, RobotVehicleEntity.createAttributes())
 		registerNetworking()
 		registerAttackOverrides()
+		registerDamageRules()
 		registerPlayerLifecycle()
 		registerRobotModeMaintenance()
 		registerCommands()
@@ -75,6 +78,7 @@ object RoboMinecraft : ModInitializer {
 		PayloadTypeRegistry.playC2S().register(FireBlasterPayload.ID, FireBlasterPayload.CODEC)
 		PayloadTypeRegistry.playC2S().register(RobotConfigPayload.ID, RobotConfigPayload.CODEC)
 		PayloadTypeRegistry.playC2S().register(BuyAmmoPayload.ID, BuyAmmoPayload.CODEC)
+		PayloadTypeRegistry.playC2S().register(AerialControlPayload.ID, AerialControlPayload.CODEC)
 		PayloadTypeRegistry.playS2C().register(RobotHudPayload.ID, RobotHudPayload.CODEC)
 		ServerPlayNetworking.registerGlobalReceiver(FireBlasterPayload.ID) { _, context ->
 			val player = context.player()
@@ -88,6 +92,12 @@ object RoboMinecraft : ModInitializer {
 		}
 		ServerPlayNetworking.registerGlobalReceiver(BuyAmmoPayload.ID) { payload, context ->
 			buyAmmo(context.player(), payload)
+		}
+		ServerPlayNetworking.registerGlobalReceiver(AerialControlPayload.ID) { payload, context ->
+			val state = stateFor(context.player())
+			state.aerialFlightMode = payload.flightMode
+			state.aerialAscending = payload.ascending
+			state.aerialDescending = payload.descending
 		}
 	}
 
@@ -105,6 +115,12 @@ object RoboMinecraft : ModInitializer {
 			} else {
 				InteractionResult.PASS
 			}
+		}
+	}
+
+	private fun registerDamageRules() {
+		ServerLivingEntityEvents.ALLOW_DAMAGE.register { entity, _, _ ->
+			entity !is ServerPlayer || !isAerialRobot(entity)
 		}
 	}
 
@@ -150,7 +166,9 @@ object RoboMinecraft : ModInitializer {
 				val state = stateFor(player)
 				val stats = state.stats()
 
-				state.heat = max(0.0, state.heat - stats.heatCoolingPerSecond / 20.0)
+				if (server.tickCount % HEAT_SETTLEMENT_INTERVAL_TICKS == 0) {
+					state.heat = max(0.0, state.heat - stats.heatCoolingPerSecond / 10.0)
+				}
 
 				if (state.enabled) {
 					applyCollisionDamage(player)
@@ -251,6 +269,7 @@ object RoboMinecraft : ModInitializer {
 									})
 							)
 					)
+					.then(Commands.literal("aerial").executes { context -> setAerial(context) })
 					.then(
 						Commands.literal("level")
 							.then(
@@ -375,6 +394,10 @@ object RoboMinecraft : ModInitializer {
 	}
 
 	private fun applyCollisionDamage(player: ServerPlayer) {
+		if (isAerialRobot(player)) {
+			return
+		}
+
 		val serverTick = player.level().server.tickCount
 		val previousCollisionTick = lastCollisionTicks[player.uuid] ?: -COLLISION_COOLDOWN_TICKS
 
@@ -405,6 +428,8 @@ object RoboMinecraft : ModInitializer {
 				heatLimit = if (state.enabled) stats.heatLimit else 0,
 				heroAmmo = state.heroAmmo,
 				infantryAmmo = state.infantryAmmo,
+				aerialAmmo = state.aerialAmmo,
+				aerialFlightMode = state.aerialFlightMode,
 				robotKind = state.profile.kind.ordinal,
 				heroMode = state.profile.heroMode.ordinal,
 				heroMobilityMode = state.profile.heroMobilityMode.ordinal,
@@ -429,10 +454,7 @@ object RoboMinecraft : ModInitializer {
 
 		state.enabled = true
 		state.profile = profile
-		if (previousKind != profile.kind) {
-			state.heroAmmo = 0
-			state.infantryAmmo = 0
-		}
+		applyProfileAmmoReset(state, previousKind, profile.kind)
 		state.heat = 0.0
 		state.appliedMaxHp = 0
 		resetRobotLocomotionState(state)
@@ -445,6 +467,11 @@ object RoboMinecraft : ModInitializer {
 		val kind = enumByOrdinal(payload.robotKind, RobotKind.INFANTRY)
 		val amount = payload.amount.coerceIn(0, RobotConstants.MAX_AMMO_PER_TYPE)
 		val state = stateFor(player)
+
+		if (kind == RobotKind.AERIAL) {
+			player.displayClientMessage(Component.literal("Aerial ammo cannot be purchased. Reconfigure to refresh to 750 rounds."), true)
+			return
+		}
 
 		if (amount <= 0) {
 			return
@@ -488,10 +515,7 @@ object RoboMinecraft : ModInitializer {
 		val previousKind = state.profile.kind
 		state.enabled = true
 		state.profile = RobotProfile(kind = RobotKind.HERO, heroMode = mode, heroMobilityMode = mobilityMode)
-		if (previousKind != RobotKind.HERO) {
-			state.heroAmmo = 0
-			state.infantryAmmo = 0
-		}
+		applyProfileAmmoReset(state, previousKind, RobotKind.HERO)
 		state.heat = 0.0
 		state.appliedMaxHp = 0
 		resetRobotLocomotionState(state)
@@ -517,16 +541,29 @@ object RoboMinecraft : ModInitializer {
 			infantryChassisMode = chassisMode,
 			infantryLauncherMode = launcherMode
 		)
-		if (previousKind != RobotKind.INFANTRY) {
-			state.heroAmmo = 0
-			state.infantryAmmo = 0
-		}
+		applyProfileAmmoReset(state, previousKind, RobotKind.INFANTRY)
 		state.heat = 0.0
 		state.appliedMaxHp = 0
 		resetRobotLocomotionState(state)
 		nextShotTicks.remove(player.uuid)
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal(statusLine(player)), false)
+		return 1
+	}
+
+	private fun setAerial(context: CommandContext<CommandSourceStack>): Int {
+		val player = context.source.getPlayerOrException()
+		val state = stateFor(player)
+		val previousKind = state.profile.kind
+		state.enabled = true
+		state.profile = RobotProfile(kind = RobotKind.AERIAL)
+		applyProfileAmmoReset(state, previousKind, RobotKind.AERIAL)
+		state.heat = 0.0
+		state.appliedMaxHp = 0
+		resetRobotLocomotionState(state)
+		nextShotTicks.remove(player.uuid)
+		applyRobotAttributes(player, state, state.stats())
+		player.displayClientMessage(Component.literal("${statusLine(player)} | jump ascends | Left Alt descends"), false)
 		return 1
 	}
 
@@ -561,8 +598,46 @@ object RoboMinecraft : ModInitializer {
 		return setExperience(context, state.experience + amount)
 	}
 
+	fun killAerialPilot(player: ServerPlayer) {
+		if (player.isPassenger) {
+			player.stopRiding()
+		}
+		player.isInvisible = false
+		discardRobotVehicle(player)
+		player.setHealth(0.0f)
+		val level = player.level() as net.minecraft.server.level.ServerLevel
+		player.kill(level)
+	}
+
+	private fun applyProfileAmmoReset(state: PilotState, previousKind: RobotKind, currentKind: RobotKind) {
+		if (previousKind != currentKind) {
+			state.heroAmmo = 0
+			state.infantryAmmo = 0
+			state.aerialAmmo = 0
+		}
+		if (currentKind == RobotKind.AERIAL) {
+			state.aerialAmmo = RobotRules.AERIAL_INITIAL_AMMO
+		}
+	}
+
 	fun isRobotPilot(player: Entity): Boolean {
 		return pilotStates[player.uuid]?.enabled ?: true
+	}
+
+	fun isAerialRobot(entity: Entity): Boolean {
+		return isRobotPilot(entity) && stateFor(entity).profile.kind == RobotKind.AERIAL
+	}
+
+	fun isAerialDescending(entity: Entity): Boolean {
+		return isAerialRobot(entity) && stateFor(entity).aerialDescending
+	}
+
+	fun isAerialFlightMode(entity: Entity): Boolean {
+		return isAerialRobot(entity) && stateFor(entity).aerialFlightMode
+	}
+
+	fun isAerialAscending(entity: Entity): Boolean {
+		return isAerialRobot(entity) && stateFor(entity).aerialAscending
 	}
 
 	fun robotStatsOrNull(entity: Entity): RobotStats? {
@@ -577,8 +652,9 @@ object RoboMinecraft : ModInitializer {
 		val state = stateFor(player)
 		val stats = state.stats()
 		val status = if (state.enabled) "online" else "offline"
+		val hpText = if (state.profile.kind == RobotKind.AERIAL) "N/A" else stats.maxHp.toString()
 
-		return "RoboMC $status | ${state.profile.displayName()} | Lv.${state.level} XP ${state.experience}/5000 | HP ${stats.maxHp} | Power ${stats.chassisPower}W | ${stats.physicalSpec.massKilograms.roundToInt()}kg | ${stats.movementSpeedMetersPerSecond.formatOneDecimal()}m/s | climb ${stats.stepHeightBlocks.formatOneDecimal()} blocks | jump ${stats.jumpHeightBlocks.formatOneDecimal()} blocks | Ammo ${state.ammoFor(state.profile.kind)} | Heat ${state.heat.roundToInt()}/${stats.heatLimit} | Cooling ${stats.heatCoolingPerSecond.roundToInt()}/s | Fire ${stats.fireRateHz.roundToInt()}Hz | Shot ${stats.bullet.name} ${stats.bullet.damage.roundToInt()}HP @ ${stats.bullet.muzzleVelocityMetersPerSecond.roundToInt()}m/s"
+		return "RoboMC $status | ${state.profile.displayName()} | Lv.${state.level} XP ${state.experience}/5000 | HP $hpText | Power ${stats.chassisPower}W | ${stats.physicalSpec.massKilograms.roundToInt()}kg | ${stats.movementSpeedMetersPerSecond.formatOneDecimal()}m/s | climb ${stats.stepHeightBlocks.formatOneDecimal()} blocks | jump ${stats.jumpHeightBlocks.formatOneDecimal()} blocks | Ammo ${state.ammoFor(state.profile.kind)} | Heat ${state.heat.roundToInt()}/${stats.heatLimit} | Cooling ${stats.heatCoolingPerSecond.roundToInt()}/s | Fire ${stats.fireRateHz.roundToInt()}Hz | Shot ${stats.bullet.name} ${stats.bullet.damage.roundToInt()}HP @ ${stats.bullet.muzzleVelocityMetersPerSecond.roundToInt()}m/s"
 	}
 
 	private fun applyRobotAttributes(player: LivingEntity, state: PilotState, stats: RobotStats) {
@@ -700,5 +776,8 @@ object RoboMinecraft : ModInitializer {
 		state.pauseLockX = null
 		state.pauseLockY = null
 		state.pauseLockZ = null
+		state.aerialFlightMode = false
+		state.aerialAscending = false
+		state.aerialDescending = false
 	}
 }

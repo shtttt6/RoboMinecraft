@@ -3,11 +3,13 @@ package com.robominecraft
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
 import net.minecraft.network.syncher.SynchedEntityData
+import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityDimensions
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.MobCategory
+import net.minecraft.world.entity.MoverType
 import net.minecraft.world.entity.Pose
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier
 import net.minecraft.world.entity.ai.attributes.Attributes
@@ -17,6 +19,8 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 import kotlin.math.max
+import kotlin.math.cos
+import kotlin.math.sin
 
 class RobotVehicleEntity(
 	type: EntityType<out PathfinderMob>,
@@ -54,8 +58,24 @@ class RobotVehicleEntity(
 	}
 
 	override fun getPassengerAttachmentPoint(passenger: Entity, dimensions: EntityDimensions, scaleFactor: Float): Vec3 {
-		val seatHeight = physicalSpec().collisionHeightBlocks * 0.7
+		val spec = physicalSpec()
+		val seatHeight = if (robotKind() == RobotKind.AERIAL) {
+			spec.viewHeightBlocks
+		} else {
+			spec.collisionHeightBlocks * 0.7
+		}
 		return Vec3(0.0, seatHeight, 0.0)
+	}
+
+	override fun positionRider(passenger: Entity, moveFunction: Entity.MoveFunction) {
+		if (robotKind() != RobotKind.AERIAL) {
+			super.positionRider(passenger, moveFunction)
+			return
+		}
+
+		val desiredEyeY = y + physicalSpec().viewHeightBlocks
+		val riderBaseY = desiredEyeY - passenger.eyeHeight
+		moveFunction.accept(passenger, x, riderBaseY, z)
 	}
 
 	override fun travel(travelVector: Vec3) {
@@ -71,11 +91,15 @@ class RobotVehicleEntity(
 		xRotO = xRot
 		yBodyRot = yRot
 		yHeadRot = yRot
+		setSpeed(getAttributeValue(Attributes.MOVEMENT_SPEED).toFloat())
+
+		if (robotKind() == RobotKind.AERIAL) {
+			travelAerial(rider)
+			return
+		}
 
 		val strafe = rider.xxa * 0.5f
 		val forward = rider.zza
-		setSpeed(getAttributeValue(Attributes.MOVEMENT_SPEED).toFloat())
-
 		if (rider.isJumping && onGround()) {
 			jumpFromGround()
 		}
@@ -90,9 +114,30 @@ class RobotVehicleEntity(
 			return
 		}
 
+		val aerial = robotKind() == RobotKind.AERIAL
+		val flightMode = aerial && controllingPassenger != null && controllingPassenger?.let { RoboMinecraft.isAerialFlightMode(it) } == true
+		setNoGravity(flightMode)
+		if (flightMode) {
+			resetFallDistance()
+		}
+
 		if (passengers.isEmpty()) {
 			remove(RemovalReason.DISCARDED)
 		}
+	}
+
+	override fun causeFallDamage(fallDistance: Double, damageMultiplier: Float, damageSource: DamageSource): Boolean {
+		if (robotKind() != RobotKind.AERIAL) {
+			return super.causeFallDamage(fallDistance, damageMultiplier, damageSource)
+		}
+
+		val rider = controllingPassenger as? net.minecraft.server.level.ServerPlayer
+		if (rider != null && !RoboMinecraft.isAerialFlightMode(rider) && fallDistance > AERIAL_FATAL_FALL_DISTANCE_BLOCKS) {
+			RoboMinecraft.killAerialPilot(rider)
+		}
+
+		resetFallDistance()
+		return true
 	}
 
 	override fun canBeCollidedWith(entity: Entity?): Boolean {
@@ -138,7 +183,42 @@ class RobotVehicleEntity(
 		return RobotRules.physicalSpec(robotKind())
 	}
 
+	private fun travelAerial(rider: Player) {
+		val flightMode = RoboMinecraft.isAerialFlightMode(rider)
+		if (!flightMode) {
+			setDeltaMovement(0.0, deltaMovement.y, 0.0)
+			super.travel(Vec3.ZERO)
+			return
+		}
+
+		val speed = getAttributeValue(Attributes.MOVEMENT_SPEED)
+		val airborne = !onGround() || deltaMovement.y > 0.02
+		val horizontalInputEnabled = airborne
+		val forward = if (horizontalInputEnabled) rider.zza.toDouble() else 0.0
+		val strafe = if (horizontalInputEnabled) (rider.xxa * 0.85f).toDouble() else 0.0
+		val ascending = RoboMinecraft.isAerialAscending(rider)
+		val descending = RoboMinecraft.isAerialDescending(rider)
+		val verticalInput = when {
+			ascending -> 1.0
+			descending && !onGround() -> -1.0
+			else -> 0.0
+		}
+
+		val yawRadians = Math.toRadians(yRot.toDouble())
+		val forwardVec = Vec3(-sin(yawRadians), 0.0, cos(yawRadians))
+		val rightVec = Vec3(cos(yawRadians), 0.0, sin(yawRadians))
+		var movement = forwardVec.scale(forward).add(rightVec.scale(strafe)).add(0.0, verticalInput, 0.0)
+
+		if (movement.lengthSqr() > 1.0E-6) {
+			movement = movement.normalize().scale(speed)
+		}
+
+		setDeltaMovement(movement)
+		move(MoverType.SELF, deltaMovement)
+	}
 	companion object {
+		private const val AERIAL_FATAL_FALL_DISTANCE_BLOCKS = 20.0
+
 		private val DATA_ROBOT_KIND: EntityDataAccessor<Int> =
 			SynchedEntityData.defineId(RobotVehicleEntity::class.java, EntityDataSerializers.INT)
 
@@ -152,7 +232,7 @@ class RobotVehicleEntity(
 		}
 
 		fun builder(): EntityType.Builder<RobotVehicleEntity> {
-			val maxSpec = RobotRules.physicalSpec(RobotKind.HERO)
+			val maxSpec = RobotRules.physicalSpec(RobotKind.AERIAL)
 			val footprint = max(maxSpec.lengthBlocks, maxSpec.widthBlocks).toFloat()
 			return EntityType.Builder.of(::RobotVehicleEntity, MobCategory.MISC)
 				.sized(footprint, maxSpec.collisionHeightBlocks.toFloat())

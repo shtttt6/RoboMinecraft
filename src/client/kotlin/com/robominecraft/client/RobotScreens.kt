@@ -41,6 +41,11 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 			robotKind = RobotKind.INFANTRY
 			rebuildControls()
 		})
+		y += 30
+		addRenderableWidget(toggleButton("空中机器人", robotKind == RobotKind.AERIAL, centerX - 60, y) {
+			robotKind = RobotKind.AERIAL
+			rebuildControls()
+		})
 
 		y += 38
 		if (robotKind == RobotKind.HERO) {
@@ -48,7 +53,7 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 				heroMobilityMode = HeroMobilityMode.REGULAR
 				rebuildControls()
 			})
-			addRenderableWidget(toggleButton("英雄步兵", heroMobilityMode == HeroMobilityMode.WHEEL_LEGGED, centerX + 4, y) {
+			addRenderableWidget(toggleButton("轮腿英雄", heroMobilityMode == HeroMobilityMode.WHEEL_LEGGED, centerX + 4, y) {
 				heroMobilityMode = HeroMobilityMode.WHEEL_LEGGED
 				rebuildControls()
 			})
@@ -62,7 +67,7 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 				heroMode = HeroMode.RANGED
 				rebuildControls()
 			})
-		} else {
+		} else if (robotKind == RobotKind.INFANTRY) {
 			addRenderableWidget(toggleButton("常规步兵", infantryMobilityMode == InfantryMobilityMode.REGULAR, centerX - 124, y) {
 				infantryMobilityMode = InfantryMobilityMode.REGULAR
 				rebuildControls()
@@ -91,6 +96,18 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 				infantryLauncherMode = InfantryLauncherMode.COOLING
 				rebuildControls()
 			})
+		} else {
+			addRenderableWidget(
+				Button.builder(Component.literal("飞行 17mm 无人机")) {}
+					.bounds(centerX - 124, y, 248, 20)
+					.build()
+			)
+			y += 30
+			addRenderableWidget(
+				Button.builder(Component.literal("750 发补给 | 不能买弹")) {}
+					.bounds(centerX - 124, y, 248, 20)
+					.build()
+			)
 		}
 
 		val bottomY = height / 2 + 70
@@ -123,7 +140,7 @@ class RobotConfigScreen : Screen(Component.literal("RoboMC Config")) {
 		context.drawCenteredString(font, title, width / 2, height / 2 - 118, 0xFFFFFFFF.toInt())
 		context.drawCenteredString(font, "P 打开配置界面，选择机器人类型和模式", width / 2, height / 2 - 104, 0xFFC8D8E8.toInt())
 
-		val ammoText = "当前弹量：英雄 ${RobotClientState.heroAmmo} | 步兵 ${RobotClientState.infantryAmmo}"
+		val ammoText = "当前弹量：英雄 ${RobotClientState.heroAmmo} | 步兵 ${RobotClientState.infantryAmmo} | 空中 ${RobotClientState.aerialAmmo}"
 		context.drawCenteredString(font, ammoText, width / 2, height / 2 + 42, 0xFFE8F7FF.toInt())
 		super.render(context, mouseX, mouseY, partialTick)
 	}
@@ -148,6 +165,7 @@ class AmmoPurchaseScreen(private val robotKind: RobotKind) : Screen(Component.li
 	private val deltas = when (robotKind) {
 		RobotKind.HERO -> intArrayOf(-10, -5, -2, -1, 1, 2, 5, 10)
 		RobotKind.INFANTRY -> intArrayOf(-100, -50, -20, -10, 10, 20, 50, 100)
+		RobotKind.AERIAL -> intArrayOf()
 	}
 	private var selectedAmount = 0
 
@@ -157,6 +175,16 @@ class AmmoPurchaseScreen(private val robotKind: RobotKind) : Screen(Component.li
 
 	private fun rebuildControls() {
 		clearWidgets()
+
+		if (robotKind == RobotKind.AERIAL) {
+			val centerX = width / 2
+			addRenderableWidget(
+				Button.builder(Component.literal("关闭")) {
+					Minecraft.getInstance().setScreen(null)
+				}.bounds(centerX - 50, height / 2 + 20, 100, 20).build()
+			)
+			return
+		}
 
 		val centerX = width / 2
 		val y = height / 2 - 6
@@ -191,6 +219,13 @@ class AmmoPurchaseScreen(private val robotKind: RobotKind) : Screen(Component.li
 
 	override fun render(context: GuiGraphics, mouseX: Int, mouseY: Int, partialTick: Float) {
 		renderInGameOverlay(context)
+		if (robotKind == RobotKind.AERIAL) {
+			context.drawCenteredString(font, "空中机器人不能买弹", width / 2, height / 2 - 18, 0xFFFFFFFF.toInt())
+			context.drawCenteredString(font, "重新应用空中机器人配置可刷新到 750 发", width / 2, height / 2 + 2, 0xFFC8D8E8.toInt())
+			super.render(context, mouseX, mouseY, partialTick)
+			return
+		}
+
 		val bulletName = if (robotKind == RobotKind.HERO) "42mm" else "17mm"
 		context.drawCenteredString(font, "${robotKind.displayName} $bulletName 买弹", width / 2, height / 2 - 78, 0xFFFFFFFF.toInt())
 		context.drawCenteredString(font, "已有弹量：${RobotClientState.ammoFor(robotKind)}", width / 2, height / 2 - 58, 0xFFC8D8E8.toInt())
