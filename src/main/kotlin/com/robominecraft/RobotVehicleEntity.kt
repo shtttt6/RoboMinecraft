@@ -3,6 +3,7 @@ package com.robominecraft
 import net.minecraft.network.syncher.EntityDataAccessor
 import net.minecraft.network.syncher.EntityDataSerializers
 import net.minecraft.network.syncher.SynchedEntityData
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityDimensions
@@ -140,6 +141,15 @@ class RobotVehicleEntity(
 
 		resetFallDistance()
 		return true
+	}
+
+	override fun hurtServer(level: ServerLevel, damageSource: DamageSource, amount: Float): Boolean {
+		val rider = controllingPassenger as? net.minecraft.server.level.ServerPlayer
+		if (rider == null || damageSource.entity === rider || damageSource.directEntity === rider) {
+			return false
+		}
+
+		return rider.hurtServer(level, damageSource, amount)
 	}
 
 	private fun aerialCrashDeathChance(fallDistance: Double): Double {
