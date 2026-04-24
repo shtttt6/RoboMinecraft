@@ -86,11 +86,11 @@ data class RobotStats(
 
 data class RobotProfile(
 	val kind: RobotKind = RobotKind.INFANTRY,
-	val heroMode: HeroMode = HeroMode.MELEE,
+	val heroMode: HeroMode = HeroMode.RANGED,
 	val heroMobilityMode: HeroMobilityMode = HeroMobilityMode.REGULAR,
 	val infantryMobilityMode: InfantryMobilityMode = InfantryMobilityMode.REGULAR,
-	val infantryChassisMode: InfantryChassisMode = InfantryChassisMode.POWER,
-	val infantryLauncherMode: InfantryLauncherMode = InfantryLauncherMode.BURST
+	val infantryChassisMode: InfantryChassisMode = InfantryChassisMode.HEALTH,
+	val infantryLauncherMode: InfantryLauncherMode = InfantryLauncherMode.COOLING
 ) {
 	fun displayName(): String {
 		return when (kind) {

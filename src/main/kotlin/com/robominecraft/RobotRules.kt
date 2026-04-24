@@ -1,11 +1,12 @@
 package com.robominecraft
 
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 object RobotRules {
 	const val AERIAL_INITIAL_AMMO = 750
+	private const val HERO_FIRE_RATE_HZ = 5.0
+	private const val AUTO_17MM_FIRE_RATE_HZ = 20.0
 
 	private val infantryPhysicalSpec = RobotPhysicalSpec(
 		lengthMeters = 0.6,
@@ -29,20 +30,45 @@ object RobotRules {
 
 	private val infantryBullet = BulletSpec(
 		name = "17mm",
-		diameterMeters = 0.017,
+		diameterMeters = 0.0168,
 		massKilograms = 0.0032,
 		material = "TPU",
-		muzzleVelocityMetersPerSecond = 30.0,
+		muzzleVelocityMetersPerSecond = 25.0,
 		damage = 20.0f
 	)
 	private val heroBullet = BulletSpec(
 		name = "42mm",
-		diameterMeters = 0.042,
+		diameterMeters = 0.0425,
 		massKilograms = 0.0445,
 		material = "TPE",
-		muzzleVelocityMetersPerSecond = 16.0,
+		muzzleVelocityMetersPerSecond = 12.0,
 		damage = 200.0f
 	)
+
+	private val experienceByLevel = intArrayOf(0, 550, 1100, 1650, 2200, 2750, 3300, 3850, 4400, 5000)
+
+	private val heroMeleeHp = intArrayOf(200, 225, 250, 275, 300, 325, 350, 375, 400, 450)
+	private val heroMeleePower = intArrayOf(70, 75, 80, 85, 90, 95, 100, 105, 110, 120)
+	private val heroMeleeHeat = intArrayOf(140, 150, 160, 170, 180, 190, 200, 210, 220, 240)
+	private val heroMeleeCooling = doubleArrayOf(12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0)
+
+	private val heroRangedHp = intArrayOf(150, 165, 180, 195, 210, 225, 240, 255, 270, 300)
+	private val heroRangedPower = intArrayOf(50, 55, 60, 65, 70, 75, 80, 85, 90, 100)
+	private val heroRangedHeat = intArrayOf(100, 102, 104, 106, 108, 110, 115, 120, 125, 130)
+	private val heroRangedCooling = doubleArrayOf(20.0, 23.0, 26.0, 29.0, 32.0, 35.0, 38.0, 41.0, 44.0, 50.0)
+
+	private val infantryPowerHp = intArrayOf(150, 175, 200, 225, 250, 275, 300, 325, 350, 400)
+	private val infantryPowerPower = intArrayOf(60, 65, 70, 75, 80, 85, 90, 95, 100, 100)
+	private val infantryHealthHp = intArrayOf(200, 225, 250, 275, 300, 325, 350, 375, 400, 400)
+	private val infantryHealthPower = intArrayOf(45, 50, 55, 60, 65, 70, 75, 80, 90, 100)
+
+	private val infantryBurstHeat = intArrayOf(170, 180, 190, 200, 210, 220, 230, 240, 250, 260)
+	private val infantryBurstCooling = doubleArrayOf(5.0, 7.0, 9.0, 11.0, 12.0, 13.0, 14.0, 16.0, 18.0, 20.0)
+	private val infantryCoolingHeat = intArrayOf(40, 48, 56, 64, 72, 80, 88, 96, 114, 120)
+	private val infantryCoolingCooling = doubleArrayOf(12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0)
+
+	private val aerialHeat = intArrayOf(100, 110, 120, 130, 140, 150, 160, 170, 180, 200)
+	private val aerialCooling = doubleArrayOf(20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0)
 
 	fun stats(profile: RobotProfile, level: Int): RobotStats {
 		return when (profile.kind) {
@@ -67,61 +93,45 @@ object RobotRules {
 	}
 
 	fun requiredExperienceForLevel(level: Int): Int {
-		return interpolate(level.coerceIn(1, 10), 0, 2200, 5000)
+		return statForLevel(experienceByLevel, level)
 	}
 
 	fun levelForExperience(experience: Int): Int {
-		return (1..10).last { requiredExperienceForLevel(it) <= experience.coerceAtLeast(0) }
+		val clampedExperience = experience.coerceAtLeast(0)
+		return (1..experienceByLevel.size).last { requiredExperienceForLevel(it) <= clampedExperience }
 	}
 
 	private fun heroStats(level: Int, mobilityMode: HeroMobilityMode, mode: HeroMode): RobotStats {
-		val maxHp = when (mode) {
-			HeroMode.MELEE -> interpolate(level, 200, 300, 450)
-			HeroMode.RANGED -> interpolate(level, 150, 210, 300)
+		val spec = when (mode) {
+			HeroMode.MELEE -> RobotLevelSpec(
+				maxHp = statForLevel(heroMeleeHp, level),
+				chassisPower = statForLevel(heroMeleePower, level),
+				heatLimit = statForLevel(heroMeleeHeat, level),
+				heatCooling = statForLevel(heroMeleeCooling, level)
+			)
+			HeroMode.RANGED -> RobotLevelSpec(
+				maxHp = statForLevel(heroRangedHp, level),
+				chassisPower = statForLevel(heroRangedPower, level),
+				heatLimit = statForLevel(heroRangedHeat, level),
+				heatCooling = statForLevel(heroRangedCooling, level)
+			)
 		}
-		val chassisPower = when (mode) {
-			HeroMode.MELEE -> interpolate(level, 70, 90, 120)
-			HeroMode.RANGED -> interpolate(level, 50, 70, 100)
-		}
-		val heatLimit = when (mode) {
-			HeroMode.MELEE -> interpolate(level, 140, 180, 240)
-			HeroMode.RANGED -> interpolate(level, 100, 115, 130)
-		}
-		val heatCooling = when (mode) {
-			HeroMode.MELEE -> interpolateDouble(level, 5.0, 10.0, 20.0)
-			HeroMode.RANGED -> interpolateDouble(level, 5.0, 10.0, 15.0)
-		}
-		val stepHeightBlocks = when (mobilityMode) {
-			HeroMobilityMode.REGULAR -> RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS
-			HeroMobilityMode.WHEEL_LEGGED -> 2.0
-		}
-		val jumpStrength = when (mobilityMode) {
-			HeroMobilityMode.REGULAR -> 0.0
-			HeroMobilityMode.WHEEL_LEGGED -> 0.6
-		}
-		val jumpHeightBlocks = when (mobilityMode) {
-			HeroMobilityMode.REGULAR -> 0.0
-			HeroMobilityMode.WHEEL_LEGGED -> 2.0
-		}
-		val stepPauseTicks = when (mobilityMode) {
-			HeroMobilityMode.REGULAR -> 0
-			HeroMobilityMode.WHEEL_LEGGED -> 10
-		}
+		val mobility = heroMobilitySpec(mobilityMode)
 
 		return RobotStats(
-			maxHp = maxHp,
-			chassisPower = chassisPower,
-			heatLimit = heatLimit,
-			heatCoolingPerSecond = heatCooling,
+			maxHp = spec.maxHp,
+			chassisPower = spec.chassisPower,
+			heatLimit = spec.heatLimit,
+			heatCoolingPerSecond = spec.heatCooling,
 			shotHeat = 100.0,
-			fireRateHz = 5.0,
+			fireRateHz = HERO_FIRE_RATE_HZ,
 			bullet = heroBullet,
 			physicalSpec = heroPhysicalSpec,
-			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassisPower, heroPhysicalSpec.massKilograms),
-			stepHeightBlocks = stepHeightBlocks,
-			jumpStrength = jumpStrength,
-			jumpHeightBlocks = jumpHeightBlocks,
-			stepPauseTicks = stepPauseTicks
+			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(spec.chassisPower, heroPhysicalSpec.massKilograms),
+			stepHeightBlocks = mobility.stepHeightBlocks,
+			jumpStrength = mobility.jumpStrength,
+			jumpHeightBlocks = mobility.jumpHeightBlocks,
+			stepPauseTicks = mobility.stepPauseTicks
 		)
 	}
 
@@ -131,68 +141,41 @@ object RobotRules {
 		chassisMode: InfantryChassisMode,
 		launcherMode: InfantryLauncherMode
 	): RobotStats {
-		val maxHp = when (chassisMode) {
-			InfantryChassisMode.POWER -> interpolate(level, 150, 250, 400)
-			InfantryChassisMode.HEALTH -> interpolate(level, 200, 300, 400)
+		val chassis = when (chassisMode) {
+			InfantryChassisMode.POWER -> Pair(statForLevel(infantryPowerHp, level), statForLevel(infantryPowerPower, level))
+			InfantryChassisMode.HEALTH -> Pair(statForLevel(infantryHealthHp, level), statForLevel(infantryHealthPower, level))
 		}
-		val chassisPower = when (chassisMode) {
-			InfantryChassisMode.POWER -> interpolate(level, 60, 80, 100)
-			InfantryChassisMode.HEALTH -> interpolate(level, 45, 65, 100)
+		val launcher = when (launcherMode) {
+			InfantryLauncherMode.BURST -> Pair(statForLevel(infantryBurstHeat, level), statForLevel(infantryBurstCooling, level))
+			InfantryLauncherMode.COOLING -> Pair(statForLevel(infantryCoolingHeat, level), statForLevel(infantryCoolingCooling, level))
 		}
-		val heatLimit = when (launcherMode) {
-			InfantryLauncherMode.BURST -> interpolate(level, 170, 210, 260)
-			InfantryLauncherMode.COOLING -> interpolate(level, 40, 80, 120)
-		}
-		val heatCooling = when (launcherMode) {
-			InfantryLauncherMode.BURST -> interpolateDouble(level, 5.0, 10.0, 20.0)
-			InfantryLauncherMode.COOLING -> interpolateDouble(level, 10.0, 20.0, 30.0)
-		}
-		val stepHeightBlocks = when (mobilityMode) {
-			InfantryMobilityMode.REGULAR -> RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS
-			InfantryMobilityMode.WHEEL_LEGGED -> 2.0
-		}
-		val jumpStrength = when (mobilityMode) {
-			InfantryMobilityMode.REGULAR -> 0.0
-			InfantryMobilityMode.WHEEL_LEGGED -> 0.6
-		}
-		val jumpHeightBlocks = when (mobilityMode) {
-			InfantryMobilityMode.REGULAR -> 0.0
-			InfantryMobilityMode.WHEEL_LEGGED -> 2.0
-		}
-		val stepPauseTicks = when (mobilityMode) {
-			InfantryMobilityMode.REGULAR -> 0
-			InfantryMobilityMode.WHEEL_LEGGED -> 10
-		}
+		val mobility = infantryMobilitySpec(mobilityMode)
 
 		return RobotStats(
-			maxHp = maxHp,
-			chassisPower = chassisPower,
-			heatLimit = heatLimit,
-			heatCoolingPerSecond = heatCooling,
+			maxHp = chassis.first,
+			chassisPower = chassis.second,
+			heatLimit = launcher.first,
+			heatCoolingPerSecond = launcher.second,
 			shotHeat = 10.0,
-			fireRateHz = 25.0,
+			fireRateHz = AUTO_17MM_FIRE_RATE_HZ,
 			bullet = infantryBullet,
 			physicalSpec = infantryPhysicalSpec,
-			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassisPower, infantryPhysicalSpec.massKilograms),
-			stepHeightBlocks = stepHeightBlocks,
-			jumpStrength = jumpStrength,
-			jumpHeightBlocks = jumpHeightBlocks,
-			stepPauseTicks = stepPauseTicks
+			movementSpeedMetersPerSecond = movementSpeedMetersPerSecond(chassis.second, infantryPhysicalSpec.massKilograms),
+			stepHeightBlocks = mobility.stepHeightBlocks,
+			jumpStrength = mobility.jumpStrength,
+			jumpHeightBlocks = mobility.jumpHeightBlocks,
+			stepPauseTicks = mobility.stepPauseTicks
 		)
 	}
 
 	private fun aerialStats(level: Int): RobotStats {
-		val safeLevel = level.coerceIn(1, 10)
-		val heatLimitByLevel = intArrayOf(100, 110, 120, 130, 140, 150, 160, 170, 180, 200)
-		val coolingByLevel = doubleArrayOf(20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 120.0)
-
 		return RobotStats(
 			maxHp = 1,
-			chassisPower = 220,
-			heatLimit = heatLimitByLevel[safeLevel - 1],
-			heatCoolingPerSecond = coolingByLevel[safeLevel - 1],
+			chassisPower = 0,
+			heatLimit = statForLevel(aerialHeat, level),
+			heatCoolingPerSecond = statForLevel(aerialCooling, level),
 			shotHeat = 10.0,
-			fireRateHz = 25.0,
+			fireRateHz = AUTO_17MM_FIRE_RATE_HZ,
 			bullet = infantryBullet,
 			physicalSpec = aerialPhysicalSpec,
 			movementSpeedMetersPerSecond = 3.5,
@@ -203,22 +186,46 @@ object RobotRules {
 		)
 	}
 
+	private fun heroMobilitySpec(mode: HeroMobilityMode): MobilitySpec {
+		return when (mode) {
+			HeroMobilityMode.REGULAR -> MobilitySpec(RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS, 0.0, 0.0, 0)
+			HeroMobilityMode.WHEEL_LEGGED -> MobilitySpec(2.0, 0.6, 2.0, 10)
+		}
+	}
+
+	private fun infantryMobilitySpec(mode: InfantryMobilityMode): MobilitySpec {
+		return when (mode) {
+			InfantryMobilityMode.REGULAR -> MobilitySpec(RobotConstants.CLIMBABLE_STEP_HEIGHT_BLOCKS, 0.0, 0.0, 0)
+			InfantryMobilityMode.WHEEL_LEGGED -> MobilitySpec(2.0, 0.6, 2.0, 10)
+		}
+	}
+
 	private fun movementSpeedMetersPerSecond(chassisPowerWatts: Int, massKilograms: Double): Double {
+		if (chassisPowerWatts <= 0) {
+			return 0.0
+		}
 		return RobotConstants.ROBOT_SPEED_COEFFICIENT * sqrt(chassisPowerWatts / massKilograms)
 	}
 
-	private fun interpolate(level: Int, levelOne: Int, levelFive: Int, levelTen: Int): Int {
-		return interpolateDouble(level, levelOne.toDouble(), levelFive.toDouble(), levelTen.toDouble()).roundToInt()
+	private fun statForLevel(values: IntArray, level: Int): Int {
+		return values[level.coerceIn(1, values.size) - 1]
 	}
 
-	private fun interpolateDouble(level: Int, levelOne: Double, levelFive: Double, levelTen: Double): Double {
-		val safeLevel = level.coerceIn(1, 10)
-		return if (safeLevel <= 5) {
-			val progress = (safeLevel - 1) / 4.0
-			levelOne + (levelFive - levelOne) * progress
-		} else {
-			val progress = (safeLevel - 5) / 5.0
-			levelFive + (levelTen - levelFive) * progress
-		}
+	private fun statForLevel(values: DoubleArray, level: Int): Double {
+		return values[level.coerceIn(1, values.size) - 1]
 	}
 }
+
+private data class RobotLevelSpec(
+	val maxHp: Int,
+	val chassisPower: Int,
+	val heatLimit: Int,
+	val heatCooling: Double
+)
+
+private data class MobilitySpec(
+	val stepHeightBlocks: Double,
+	val jumpStrength: Double,
+	val jumpHeightBlocks: Double,
+	val stepPauseTicks: Int
+)

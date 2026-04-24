@@ -132,11 +132,11 @@ internal fun RoboMinecraft.registerCommands() {
 internal fun RoboMinecraft.applyRobotConfig(player: ServerPlayer, payload: RobotConfigPayload) {
 	val profile = RobotProfile(
 		kind = enumByOrdinal(payload.robotKind, RobotKind.INFANTRY),
-		heroMode = enumByOrdinal(payload.heroMode, HeroMode.MELEE),
+		heroMode = enumByOrdinal(payload.heroMode, HeroMode.RANGED),
 		heroMobilityMode = enumByOrdinal(payload.heroMobilityMode, HeroMobilityMode.REGULAR),
 		infantryMobilityMode = enumByOrdinal(payload.infantryMobilityMode, InfantryMobilityMode.REGULAR),
-		infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.POWER),
-		infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.BURST)
+		infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.HEALTH),
+		infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.COOLING)
 	)
 	activateProfile(player, profile)
 	player.displayClientMessage(Component.literal("Robot configured: ${stateFor(player).profile.displayName()}"), true)
@@ -148,11 +148,7 @@ internal fun RoboMinecraft.buyAmmo(player: ServerPlayer, payload: BuyAmmoPayload
 	val state = stateFor(player)
 
 	if (kind == RobotKind.AERIAL) {
-		if (amount <= 0) {
-			return
-		}
-		state.aerialAmmo = RobotRules.AERIAL_INITIAL_AMMO
-		player.displayClientMessage(Component.literal("Aerial ammo restored to ${state.aerialAmmo}"), true)
+		player.displayClientMessage(Component.literal("Aerial ammo cannot be replenished during the match."), true)
 		return
 	}
 

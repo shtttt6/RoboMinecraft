@@ -34,6 +34,7 @@ internal fun RoboMinecraft.registerRobotModeMaintenance() {
 				if (vehicle != null) {
 					redirectHostileMobs(player, vehicle)
 				}
+				keepFirstHotbarSlotEmpty(player)
 				applyRobotAttributes(player, state, stats)
 				player.isInvisible = vehicle != null
 				maintainRobotVitals(player)

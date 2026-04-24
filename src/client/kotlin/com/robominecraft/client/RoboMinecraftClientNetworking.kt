@@ -24,11 +24,11 @@ internal fun RoboMinecraftClient.registerHudStateSync() {
 		} else if (payload.aerialFlightMode == lastSentAerialFlightMode) {
 			localAerialFlightMode = payload.aerialFlightMode
 		}
-		RobotClientState.heroMode = enumByOrdinal(payload.heroMode, HeroMode.MELEE)
+		RobotClientState.heroMode = enumByOrdinal(payload.heroMode, HeroMode.RANGED)
 		RobotClientState.heroMobilityMode = enumByOrdinal(payload.heroMobilityMode, HeroMobilityMode.REGULAR)
 		RobotClientState.infantryMobilityMode = enumByOrdinal(payload.infantryMobilityMode, InfantryMobilityMode.REGULAR)
-		RobotClientState.infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.POWER)
-		RobotClientState.infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.BURST)
+		RobotClientState.infantryChassisMode = enumByOrdinal(payload.infantryChassisMode, InfantryChassisMode.HEALTH)
+		RobotClientState.infantryLauncherMode = enumByOrdinal(payload.infantryLauncherMode, InfantryLauncherMode.COOLING)
 	}
 }
 

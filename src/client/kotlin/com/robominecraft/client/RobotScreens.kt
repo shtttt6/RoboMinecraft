@@ -8,7 +8,6 @@ import com.robominecraft.InfantryLauncherMode
 import com.robominecraft.InfantryMobilityMode
 import com.robominecraft.RobotConfigPayload
 import com.robominecraft.RobotKind
-import com.robominecraft.RobotRules
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphics
@@ -157,32 +156,32 @@ class RobotConfigScreen : Screen(Component.literal("Robot Config")) {
 			}
 			RobotKind.AERIAL -> {
 				addRenderableWidget(
-					Button.builder(Component.literal("Restore aerial ammo")) {
-						if (ClientPlayNetworking.canSend(BuyAmmoPayload.ID)) {
-							ClientPlayNetworking.send(BuyAmmoPayload(RobotKind.AERIAL.ordinal, RobotRules.AERIAL_INITIAL_AMMO))
-						}
-					}.bounds(centerX - 124, y, 248, 20).build()
+					Button.builder(Component.literal("No aerial config")) {}
+						.bounds(centerX - 124, y, 248, 20)
+						.build()
 				)
 			}
 		}
 
-		addRenderableWidget(
-			Button.builder(Component.literal("Apply")) {
-				sendRobotConfig(
-				robotKind = robotKind,
-				heroMode = heroMode,
-				heroMobilityMode = RobotClientState.heroMobilityMode,
-				infantryMobilityMode = RobotClientState.infantryMobilityMode,
-				infantryChassisMode = infantryChassisMode,
-				infantryLauncherMode = infantryLauncherMode
-				)
-				Minecraft.getInstance().setScreen(null)
-			}.bounds(centerX - 124, height / 2 + 76, 120, 20).build()
-		)
+		if (robotKind != RobotKind.AERIAL) {
+			addRenderableWidget(
+				Button.builder(Component.literal("Apply")) {
+					sendRobotConfig(
+					robotKind = robotKind,
+					heroMode = heroMode,
+					heroMobilityMode = RobotClientState.heroMobilityMode,
+					infantryMobilityMode = RobotClientState.infantryMobilityMode,
+					infantryChassisMode = infantryChassisMode,
+					infantryLauncherMode = infantryLauncherMode
+					)
+					Minecraft.getInstance().setScreen(null)
+				}.bounds(centerX - 124, height / 2 + 76, 120, 20).build()
+			)
+		}
 		addRenderableWidget(
 			Button.builder(Component.literal("Close")) {
 				Minecraft.getInstance().setScreen(null)
-			}.bounds(centerX + 4, height / 2 + 76, 120, 20).build()
+			}.bounds(if (robotKind == RobotKind.AERIAL) centerX - 50 else centerX + 4, height / 2 + 76, 100, 20).build()
 		)
 	}
 
@@ -200,7 +199,7 @@ class RobotConfigScreen : Screen(Component.literal("Robot Config")) {
 		return when (robotKind) {
 			RobotKind.HERO -> "P changes hero combat behavior only. K changes robot class."
 			RobotKind.INFANTRY -> "P changes infantry loadout only. K changes robot class."
-			RobotKind.AERIAL -> "P contains aerial utility only. K changes robot class."
+			RobotKind.AERIAL -> "Aerial has no configurable loadout in the 2026 rules."
 		}
 	}
 

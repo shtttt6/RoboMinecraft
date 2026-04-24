@@ -8,6 +8,7 @@ import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.ai.attributes.Attribute
 import net.minecraft.world.entity.ai.attributes.AttributeModifier
 import net.minecraft.world.entity.ai.attributes.Attributes
+import net.minecraft.world.item.ItemStack
 
 fun RoboMinecraft.isRobotPilot(player: Entity): Boolean {
 	return pilotStates[player.uuid]?.enabled ?: true
@@ -65,6 +66,22 @@ internal fun RoboMinecraft.applyRobotAttributes(player: LivingEntity, state: Pil
 
 internal fun RoboMinecraft.restorePlayerCollisionBox(player: ServerPlayer) {
 	player.refreshDimensions()
+}
+
+internal fun RoboMinecraft.keepFirstHotbarSlotEmpty(player: ServerPlayer) {
+	val inventory = player.inventory
+	val reservedStack = inventory.getItem(0)
+	if (reservedStack.isEmpty) {
+		return
+	}
+
+	for (slot in 1 until 36) {
+		if (inventory.getItem(slot).isEmpty) {
+			inventory.setItem(slot, reservedStack.copy())
+			inventory.setItem(0, ItemStack.EMPTY)
+			return
+		}
+	}
 }
 
 internal fun RoboMinecraft.removeRobotAttributes(player: LivingEntity) {

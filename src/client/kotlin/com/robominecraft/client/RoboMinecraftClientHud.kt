@@ -13,6 +13,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes
 internal fun RoboMinecraftClient.registerHudElements() {
 	hideVanillaHudElementWhenRobotActive(VanillaHudElements.HEALTH_BAR)
 	hideVanillaHudElementWhenRobotActive(VanillaHudElements.FOOD_BAR)
+	hideVanillaHudElementWhenRobotActive(VanillaHudElements.MOUNT_HEALTH)
 	HudElementRegistry.attachElementAfter(
 		VanillaHudElements.CROSSHAIR,
 		ResourceLocation.fromNamespaceAndPath(RoboMinecraft.MOD_ID, "robot_hud"),

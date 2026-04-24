@@ -16,11 +16,11 @@ object RobotClientState {
 	var aerialAmmo: Int = 0
 	var aerialFlightMode: Boolean = false
 	var robotKind: RobotKind = RobotKind.INFANTRY
-	var heroMode: HeroMode = HeroMode.MELEE
+	var heroMode: HeroMode = HeroMode.RANGED
 	var heroMobilityMode: HeroMobilityMode = HeroMobilityMode.REGULAR
 	var infantryMobilityMode: InfantryMobilityMode = InfantryMobilityMode.REGULAR
-	var infantryChassisMode: InfantryChassisMode = InfantryChassisMode.POWER
-	var infantryLauncherMode: InfantryLauncherMode = InfantryLauncherMode.BURST
+	var infantryChassisMode: InfantryChassisMode = InfantryChassisMode.HEALTH
+	var infantryLauncherMode: InfantryLauncherMode = InfantryLauncherMode.COOLING
 
 	fun currentAmmo(): Int {
 		return ammoFor(robotKind)
