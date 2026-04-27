@@ -38,6 +38,7 @@ object RoboMinecraftClient : ClientModInitializer {
 		registerHudElements()
 		registerWorldRendering()
 		registerHudStateSync()
+		ClientTickEvents.START_CLIENT_TICK.register(::tickRobotShiftSuppression)
 		ClientTickEvents.START_CLIENT_TICK.register(::tickLocalCollisionBox)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickAutoAim)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickAerialControls)

@@ -3,11 +3,13 @@ package com.robominecraft.client
 import com.robominecraft.AerialControlPayload
 import com.robominecraft.FireBlasterPayload
 import com.robominecraft.RobotKind
+import com.robominecraft.RobotVehicleEntity
 import com.mojang.blaze3d.platform.InputConstants
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
+import net.minecraft.network.chat.Component
 
 internal fun RoboMinecraftClient.registerKeyMappings() {
 	configKey = KeyBindingHelper.registerKeyBinding(
@@ -70,6 +72,18 @@ internal fun RoboMinecraftClient.tickScreenKeys(client: Minecraft) {
 		if (RobotClientState.robotKind == RobotKind.HERO) {
 			client.setScreen(AmmoPurchaseScreen(RobotKind.HERO))
 		}
+	}
+}
+
+internal fun RoboMinecraftClient.tickRobotShiftSuppression(client: Minecraft) {
+	val player = client.player ?: return
+	if (!isRobotModeActive(player)) {
+		return
+	}
+
+	client.options.keyShift.setDown(false)
+	if (player.vehicle is RobotVehicleEntity) {
+		client.gui.setOverlayMessage(Component.empty(), false)
 	}
 }
 
