@@ -5,7 +5,6 @@ import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry
 import net.minecraft.client.KeyMapping
-import net.minecraft.client.renderer.entity.NoopRenderer
 
 object RoboMinecraftClient : ClientModInitializer {
 	internal const val CLIENT_SHOT_COOLDOWN_TICKS = 1
@@ -32,8 +31,7 @@ object RoboMinecraftClient : ClientModInitializer {
 	internal var lastSentAerialDescending = false
 
 	override fun onInitializeClient() {
-		@Suppress("DEPRECATION")
-		EntityRendererRegistry.register(RoboMinecraft.ROBOT_VEHICLE_TYPE, ::NoopRenderer)
+		EntityRendererRegistry.register(RoboMinecraft.ROBOT_VEHICLE_TYPE) { context -> RobotVehicleRenderer(context) }
 		registerKeyMappings()
 		registerHudElements()
 		registerWorldRendering()

@@ -12,6 +12,7 @@ classes/
 # idea
 
 .idea/
+.kotlin/
 *.iml
 *.ipr
 *.iws
@@ -32,11 +33,22 @@ bin/
 
 run/
 
+# local tooling
+
+.claude/
+.codex/
+.gradle-user-home/
+
 # java
 
 hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# local research / temp assets
+
+images/
+tmp_pdf_page*.png
 
 *.pdf

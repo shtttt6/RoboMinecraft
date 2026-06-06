@@ -36,6 +36,9 @@ internal fun RoboMinecraftClient.registerWorldRendering() {
 			if (!isRobotModeActive(player)) {
 				return@forEach
 			}
+			if (player.vehicle is RobotVehicleEntity) {
+				return@forEach
+			}
 			if (player == client.player && firstPerson) {
 				return@forEach
 			}

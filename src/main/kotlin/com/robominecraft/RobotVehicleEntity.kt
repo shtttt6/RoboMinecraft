@@ -38,6 +38,7 @@ class RobotVehicleEntity(
 	override fun defineSynchedData(builder: SynchedEntityData.Builder) {
 		super.defineSynchedData(builder)
 		builder.define(DATA_ROBOT_KIND, RobotKind.INFANTRY.ordinal)
+		builder.define(DATA_HERO_MOBILITY_MODE, HeroMobilityMode.REGULAR.ordinal)
 	}
 
 	override fun getControllingPassenger(): LivingEntity? {
@@ -185,14 +186,18 @@ class RobotVehicleEntity(
 		return enumValues<RobotKind>().getOrElse(entityData.get(DATA_ROBOT_KIND)) { RobotKind.INFANTRY }
 	}
 
+	fun heroMobilityMode(): HeroMobilityMode {
+		return enumValues<HeroMobilityMode>().getOrElse(entityData.get(DATA_HERO_MOBILITY_MODE)) { HeroMobilityMode.REGULAR }
+	}
+
 	fun syncFromPilotState(owner: Player, state: PilotState) {
 		assignOwner(owner)
-		if (profile.kind != state.profile.kind) {
-			profile = state.profile
-			entityData.set(DATA_ROBOT_KIND, profile.kind.ordinal)
+		val kindChanged = profile.kind != state.profile.kind
+		profile = state.profile
+		entityData.set(DATA_ROBOT_KIND, profile.kind.ordinal)
+		entityData.set(DATA_HERO_MOBILITY_MODE, profile.heroMobilityMode.ordinal)
+		if (kindChanged) {
 			refreshDimensions()
-		} else {
-			profile = state.profile
 		}
 
 		val stats = state.stats()
@@ -246,6 +251,8 @@ class RobotVehicleEntity(
 		private const val AERIAL_FATAL_FALL_DISTANCE_BLOCKS_RANGE = 15.0
 
 		private val DATA_ROBOT_KIND: EntityDataAccessor<Int> =
+			SynchedEntityData.defineId(RobotVehicleEntity::class.java, EntityDataSerializers.INT)
+		private val DATA_HERO_MOBILITY_MODE: EntityDataAccessor<Int> =
 			SynchedEntityData.defineId(RobotVehicleEntity::class.java, EntityDataSerializers.INT)
 
 		fun createAttributes(): AttributeSupplier.Builder {
