@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.gradle.api.tasks.Copy
 
 plugins {
 	id("net.fabricmc.fabric-loom-remap")
@@ -71,12 +72,27 @@ dependencies {
 	}
 }
 
+val syncBlockbenchAssets by tasks.registering(Copy::class) {
+	from("blockbench/hero.bbmodel")
+	into("src/main/resources/assets/robominecraft/blockbench")
+
+	from("blockbench/hero_robot_atlas.png")
+	into("src/main/resources/assets/robominecraft/textures/entity")
+}
+
 tasks.processResources {
+	dependsOn(syncBlockbenchAssets)
 	inputs.property("version", version)
+	inputs.file("blockbench/hero.bbmodel")
+	inputs.file("blockbench/hero_robot_atlas.png")
 
 	filesMatching("fabric.mod.json") {
 		expand("version" to version)
 	}
+}
+
+tasks.matching { it.name == "sourcesJar" }.configureEach {
+	dependsOn(syncBlockbenchAssets)
 }
 
 tasks.withType<JavaCompile>().configureEach {

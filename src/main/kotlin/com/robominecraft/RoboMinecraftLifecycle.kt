@@ -10,6 +10,7 @@ internal fun RoboMinecraft.registerPlayerLifecycle() {
 		val state = stateFor(newPlayer)
 		syncPilotProgressFromMinecraft(newPlayer, state)
 		state.appliedMaxHp = 0
+		clearJudgeMode(newPlayer, state)
 		resetRobotLocomotionState(state)
 		discardRobotVehicle(newPlayer)
 
@@ -36,9 +37,14 @@ internal fun RoboMinecraft.registerRobotModeMaintenance() {
 				}
 				keepFirstHotbarSlotEmpty(player)
 				applyRobotAttributes(player, state, stats)
-				player.isInvisible = vehicle != null
+				if (state.judgeMode) {
+					maintainJudgeMode(player, state)
+				} else {
+					player.isInvisible = vehicle != null
+				}
 				maintainRobotVitals(player)
 			} else {
+				clearJudgeMode(player, state)
 				player.isInvisible = false
 				discardRobotVehicle(player)
 				resetRobotLocomotionState(state)
@@ -57,7 +63,7 @@ internal fun RoboMinecraft.registerRobotModeMaintenance() {
 				state.heat = max(0.0, state.heat - stats.heatCoolingPerSecond / 10.0)
 			}
 
-			if (state.enabled) {
+			if (state.enabled && !state.judgeMode) {
 				applyCollisionDamage(player)
 			}
 

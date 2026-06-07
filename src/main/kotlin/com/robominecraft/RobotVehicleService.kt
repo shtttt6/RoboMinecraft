@@ -15,7 +15,7 @@ internal fun RoboMinecraft.ensureRobotVehicle(player: ServerPlayer, state: Pilot
 	val trackedVehicle = trackedVehicleId?.let { level.getEntity(it) as? RobotVehicleEntity }
 	if (trackedVehicle != null && trackedVehicle.isAlive) {
 		trackedVehicle.syncFromPilotState(player, state)
-		if (player.vehicle !== trackedVehicle) {
+		if (!state.judgeMode && player.vehicle !== trackedVehicle) {
 			player.startRiding(trackedVehicle, true, true)
 		}
 		return trackedVehicle
@@ -25,7 +25,9 @@ internal fun RoboMinecraft.ensureRobotVehicle(player: ServerPlayer, state: Pilot
 	vehicle.snapTo(player.x, player.y, player.z, player.yRot, player.xRot)
 	vehicle.syncFromPilotState(player, state)
 	level.addFreshEntity(vehicle)
-	player.startRiding(vehicle, true, true)
+	if (!state.judgeMode) {
+		player.startRiding(vehicle, true, true)
+	}
 	robotVehicleIds[player.uuid] = vehicle.uuid
 	return vehicle
 }

@@ -1,7 +1,9 @@
 {
   "key.robominecraft.config": "打开 RoboMC 配置",
+  "key.robominecraft.select_robot": "打开机器人选择",
   "key.robominecraft.buy_infantry_ammo": "购买步兵弹量",
   "key.robominecraft.buy_hero_ammo": "购买英雄弹量",
+  "key.robominecraft.judge_mode": "切换裁判模式",
   "key.robominecraft.aerial_flight_toggle": "空中机器人起飞模式切换",
   "key.robominecraft.aerial_ascend": "空中机器人上升",
   "key.robominecraft.aerial_descend": "空中机器人下降"

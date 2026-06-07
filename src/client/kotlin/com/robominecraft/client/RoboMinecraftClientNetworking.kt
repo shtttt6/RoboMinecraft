@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
 internal fun RoboMinecraftClient.registerHudStateSync() {
 	ClientPlayNetworking.registerGlobalReceiver(RobotHudPayload.ID) { payload, _ ->
 		RobotClientState.enabled = payload.enabled
+		RobotClientState.judgeMode = payload.judgeMode
 		RobotClientState.heat = payload.heat.coerceAtLeast(0)
 		RobotClientState.heatLimit = payload.heatLimit.coerceAtLeast(1)
 		RobotClientState.heroAmmo = payload.heroAmmo.coerceAtLeast(0)

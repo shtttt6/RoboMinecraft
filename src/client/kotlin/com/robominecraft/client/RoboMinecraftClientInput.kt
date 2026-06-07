@@ -4,6 +4,7 @@ import com.robominecraft.AerialControlPayload
 import com.robominecraft.FireBlasterPayload
 import com.robominecraft.RobotKind
 import com.robominecraft.RobotVehicleEntity
+import com.robominecraft.ToggleJudgeModePayload
 import com.mojang.blaze3d.platform.InputConstants
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking
@@ -24,6 +25,9 @@ internal fun RoboMinecraftClient.registerKeyMappings() {
 	buyHeroAmmoKey = KeyBindingHelper.registerKeyBinding(
 		KeyMapping("key.robominecraft.buy_hero_ammo", InputConstants.Type.KEYSYM, InputConstants.KEY_I, KeyMapping.Category.MISC)
 	)
+	judgeModeKey = KeyBindingHelper.registerKeyBinding(
+		KeyMapping("key.robominecraft.judge_mode", InputConstants.Type.KEYSYM, InputConstants.KEY_F4, KeyMapping.Category.MISC)
+	)
 	aerialFlightToggleKey = KeyBindingHelper.registerKeyBinding(
 		KeyMapping("key.robominecraft.aerial_flight_toggle", InputConstants.Type.KEYSYM, InputConstants.KEY_G, KeyMapping.Category.MISC)
 	)
@@ -42,7 +46,7 @@ internal fun RoboMinecraftClient.tickShootingInput(client: Minecraft) {
 
 	val player = client.player ?: return
 
-	if (!isRobotModeActive() || !player.mainHandItem.isEmpty || !client.options.keyAttack.isDown || shotCooldownTicks > 0 || RobotClientState.currentAmmo() <= 0) {
+	if (!isRobotModeActive() || RobotClientState.judgeMode || !player.mainHandItem.isEmpty || !client.options.keyAttack.isDown || shotCooldownTicks > 0 || RobotClientState.currentAmmo() <= 0) {
 		return
 	}
 
@@ -80,6 +84,9 @@ internal fun RoboMinecraftClient.tickRobotShiftSuppression(client: Minecraft) {
 	if (!isRobotModeActive(player)) {
 		return
 	}
+	if (RobotClientState.judgeMode) {
+		return
+	}
 
 	client.options.keyShift.setDown(false)
 	if (player.vehicle is RobotVehicleEntity) {
@@ -91,6 +98,7 @@ internal fun RoboMinecraftClient.tickAerialControls(client: Minecraft) {
 	val player = client.player
 	val active = player != null &&
 		isRobotModeActive(player) &&
+		!RobotClientState.judgeMode &&
 		RobotClientState.robotKind == RobotKind.AERIAL
 	if (active) {
 		while (aerialFlightToggleKey.consumeClick()) {
@@ -115,5 +123,17 @@ internal fun RoboMinecraftClient.tickAerialControls(client: Minecraft) {
 		lastSentAerialFlightMode = localAerialFlightMode
 		lastSentAerialAscending = ascending
 		lastSentAerialDescending = descending
+	}
+}
+
+internal fun RoboMinecraftClient.tickJudgeModeToggle(client: Minecraft) {
+	if (client.screen != null || !isRobotModeActive()) {
+		return
+	}
+
+	while (judgeModeKey.consumeClick()) {
+		if (ClientPlayNetworking.canSend(ToggleJudgeModePayload.ID)) {
+			ClientPlayNetworking.send(ToggleJudgeModePayload)
+		}
 	}
 }

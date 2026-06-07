@@ -125,8 +125,8 @@ private object HeroRobotBlockbenchModel {
 
 	fun submit(poseStack: PoseStack, collector: OrderedSubmitNodeCollector, packedLight: Int) {
 		val model = loadModel() ?: return
-		model.cubes.forEach { submitCube(poseStack, collector, packedLight, it) }
-		model.meshes.forEach { submitMesh(poseStack, collector, packedLight, it) }
+		model.cubes.forEach { submitCube(poseStack, collector, packedLight, model, it) }
+		model.meshes.forEach { submitMesh(poseStack, collector, packedLight, model, it) }
 	}
 
 	fun emitBox(
@@ -270,6 +270,7 @@ private object HeroRobotBlockbenchModel {
 		poseStack: PoseStack,
 		collector: OrderedSubmitNodeCollector,
 		packedLight: Int,
+		model: ParsedModel,
 		cube: ParsedCube
 	) {
 		poseStack.pushPose()
@@ -283,22 +284,22 @@ private object HeroRobotBlockbenchModel {
 			val z2 = cube.to[2]
 
 			cube.faces["north"]?.let {
-				emitQuad(pose, consumer, packedLight, floatArrayOf(x2, y1, z1), floatArrayOf(x2, y2, z1), floatArrayOf(x1, y2, z1), floatArrayOf(x1, y1, z1), uv(it, 0), uv(it, 1), uv(it, 2), uv(it, 3), 0.0f, 0.0f, -1.0f)
+				emitQuad(pose, consumer, packedLight, floatArrayOf(x2, y1, z1), floatArrayOf(x2, y2, z1), floatArrayOf(x1, y2, z1), floatArrayOf(x1, y1, z1), uv(it, 3, model), uv(it, 0, model), uv(it, 1, model), uv(it, 2, model), 0.0f, 0.0f, -1.0f)
 			}
 			cube.faces["south"]?.let {
-				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y1, z2), floatArrayOf(x1, y2, z2), floatArrayOf(x2, y2, z2), floatArrayOf(x2, y1, z2), uv(it, 0), uv(it, 1), uv(it, 2), uv(it, 3), 0.0f, 0.0f, 1.0f)
+				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y1, z2), floatArrayOf(x1, y2, z2), floatArrayOf(x2, y2, z2), floatArrayOf(x2, y1, z2), uv(it, 3, model), uv(it, 0, model), uv(it, 1, model), uv(it, 2, model), 0.0f, 0.0f, 1.0f)
 			}
 			cube.faces["east"]?.let {
-				emitQuad(pose, consumer, packedLight, floatArrayOf(x2, y1, z2), floatArrayOf(x2, y2, z2), floatArrayOf(x2, y2, z1), floatArrayOf(x2, y1, z1), uv(it, 0), uv(it, 1), uv(it, 2), uv(it, 3), 1.0f, 0.0f, 0.0f)
+				emitQuad(pose, consumer, packedLight, floatArrayOf(x2, y1, z2), floatArrayOf(x2, y2, z2), floatArrayOf(x2, y2, z1), floatArrayOf(x2, y1, z1), uv(it, 3, model), uv(it, 0, model), uv(it, 1, model), uv(it, 2, model), 1.0f, 0.0f, 0.0f)
 			}
 			cube.faces["west"]?.let {
-				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y1, z1), floatArrayOf(x1, y2, z1), floatArrayOf(x1, y2, z2), floatArrayOf(x1, y1, z2), uv(it, 0), uv(it, 1), uv(it, 2), uv(it, 3), -1.0f, 0.0f, 0.0f)
+				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y1, z1), floatArrayOf(x1, y2, z1), floatArrayOf(x1, y2, z2), floatArrayOf(x1, y1, z2), uv(it, 3, model), uv(it, 0, model), uv(it, 1, model), uv(it, 2, model), -1.0f, 0.0f, 0.0f)
 			}
 			cube.faces["up"]?.let {
-				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y2, z1), floatArrayOf(x2, y2, z1), floatArrayOf(x2, y2, z2), floatArrayOf(x1, y2, z2), uv(it, 0), uv(it, 1), uv(it, 2), uv(it, 3), 0.0f, 1.0f, 0.0f)
+				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y2, z1), floatArrayOf(x2, y2, z1), floatArrayOf(x2, y2, z2), floatArrayOf(x1, y2, z2), uv(it, 0, model), uv(it, 1, model), uv(it, 2, model), uv(it, 3, model), 0.0f, 1.0f, 0.0f)
 			}
 			cube.faces["down"]?.let {
-				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y1, z2), floatArrayOf(x2, y1, z2), floatArrayOf(x2, y1, z1), floatArrayOf(x1, y1, z1), uv(it, 0), uv(it, 1), uv(it, 2), uv(it, 3), 0.0f, -1.0f, 0.0f)
+				emitQuad(pose, consumer, packedLight, floatArrayOf(x1, y1, z2), floatArrayOf(x2, y1, z2), floatArrayOf(x2, y1, z1), floatArrayOf(x1, y1, z1), uv(it, 0, model), uv(it, 1, model), uv(it, 2, model), uv(it, 3, model), 0.0f, -1.0f, 0.0f)
 			}
 		}
 		poseStack.popPose()
@@ -308,6 +309,7 @@ private object HeroRobotBlockbenchModel {
 		poseStack: PoseStack,
 		collector: OrderedSubmitNodeCollector,
 		packedLight: Int,
+		model: ParsedModel,
 		mesh: ParsedMesh
 	) {
 		poseStack.pushPose()
@@ -323,6 +325,10 @@ private object HeroRobotBlockbenchModel {
 					3 -> listOf(points[0], points[1], points[2], points[2])
 					else -> points.take(4)
 				}
+				val uvs = when (face.vertexUvs.size) {
+					3 -> listOf(face.vertexUvs[0], face.vertexUvs[1], face.vertexUvs[2], face.vertexUvs[2])
+					else -> face.vertexUvs.take(4)
+				}
 				val normal = faceNormal(vertices[0], vertices[1], vertices[2])
 				emitQuad(
 					pose,
@@ -332,10 +338,10 @@ private object HeroRobotBlockbenchModel {
 					vertices[1],
 					vertices[2],
 					vertices[3],
-					floatArrayOf(0.0f, 0.0f),
-					floatArrayOf(1.0f, 0.0f),
-					floatArrayOf(1.0f, 1.0f),
-					floatArrayOf(0.0f, 1.0f),
+					normalizeUv(uvs[0], model),
+					normalizeUv(uvs[1], model),
+					normalizeUv(uvs[2], model),
+					normalizeUv(uvs[3], model),
 					normal.x,
 					normal.y,
 					normal.z
@@ -392,6 +398,9 @@ private object HeroRobotBlockbenchModel {
 	}
 
 	private fun parse(root: JsonObject): ParsedModel {
+		val resolution = root.getAsJsonObject("resolution")
+		val textureWidth = resolution?.get("width")?.asFloat ?: DEFAULT_TEXTURE_SIZE
+		val textureHeight = resolution?.get("height")?.asFloat ?: DEFAULT_TEXTURE_SIZE
 		val cubes = mutableListOf<ParsedCube>()
 		val meshes = mutableListOf<ParsedMesh>()
 		root.getAsJsonArray("elements")?.forEach { elementValue ->
@@ -401,7 +410,12 @@ private object HeroRobotBlockbenchModel {
 				"mesh" -> meshes += parseMesh(element)
 			}
 		}
-		return ParsedModel(cubes, meshes)
+		return ParsedModel(
+			textureWidth = textureWidth,
+			textureHeight = textureHeight,
+			cubes = cubes,
+			meshes = meshes
+		)
 	}
 
 	private fun parseCube(element: JsonObject): ParsedCube {
@@ -437,7 +451,11 @@ private object HeroRobotBlockbenchModel {
 		element.getAsJsonObject("faces").entrySet().forEach { (_, faceValue) ->
 			val faceObject = faceValue.asJsonObject
 			val vertexIds = faceObject.getAsJsonArray("vertices").map { it.asString }
-			faces += MeshFace(vertexIds)
+			val uvObject = faceObject.getAsJsonObject("uv")
+			val vertexUvs = vertexIds.map { vertexId ->
+				floatArrayOrDefault(uvObject?.getAsJsonArray(vertexId), DEFAULT_VERTEX_UV)
+			}
+			faces += MeshFace(vertexIds, vertexUvs)
 		}
 
 		return ParsedMesh(
@@ -459,14 +477,18 @@ private object HeroRobotBlockbenchModel {
 		return FloatArray(array.size()) { index -> array[index].asFloat }
 	}
 
-	private fun uv(face: FaceUv, index: Int): FloatArray {
+	private fun uv(face: FaceUv, index: Int, model: ParsedModel): FloatArray {
 		val uv = face.uv
 		return when (index) {
-			0 -> floatArrayOf(uv[0] / TEXTURE_RESOLUTION, uv[1] / TEXTURE_RESOLUTION)
-			1 -> floatArrayOf(uv[2] / TEXTURE_RESOLUTION, uv[1] / TEXTURE_RESOLUTION)
-			2 -> floatArrayOf(uv[2] / TEXTURE_RESOLUTION, uv[3] / TEXTURE_RESOLUTION)
-			else -> floatArrayOf(uv[0] / TEXTURE_RESOLUTION, uv[3] / TEXTURE_RESOLUTION)
+			0 -> floatArrayOf(uv[0] / model.textureWidth, uv[1] / model.textureHeight)
+			1 -> floatArrayOf(uv[2] / model.textureWidth, uv[1] / model.textureHeight)
+			2 -> floatArrayOf(uv[2] / model.textureWidth, uv[3] / model.textureHeight)
+			else -> floatArrayOf(uv[0] / model.textureWidth, uv[3] / model.textureHeight)
 		}
+	}
+
+	private fun normalizeUv(uv: FloatArray, model: ParsedModel): FloatArray {
+		return floatArrayOf(uv[0] / model.textureWidth, uv[1] / model.textureHeight)
 	}
 
 	private fun faceNormal(a: FloatArray, b: FloatArray, c: FloatArray): Vector3f {
@@ -524,6 +546,8 @@ private object HeroRobotBlockbenchModel {
 	}
 
 	private data class ParsedModel(
+		val textureWidth: Float,
+		val textureHeight: Float,
 		val cubes: List<ParsedCube>,
 		val meshes: List<ParsedMesh>
 	)
@@ -545,10 +569,14 @@ private object HeroRobotBlockbenchModel {
 		val faces: List<MeshFace>
 	)
 
-	private data class MeshFace(val vertexIds: List<String>)
+	private data class MeshFace(
+		val vertexIds: List<String>,
+		val vertexUvs: List<FloatArray>
+	)
 
-	private const val TEXTURE_RESOLUTION = 16.0f
+	private const val DEFAULT_TEXTURE_SIZE = 16.0f
 	private val ZERO_POINT = floatArrayOf(0.0f, 0.0f, 0.0f)
 	private val ZERO_ROTATION = floatArrayOf(0.0f, 0.0f, 0.0f)
 	private val DEFAULT_CUBE_UV = floatArrayOf(0.0f, 0.0f, 16.0f, 16.0f)
+	private val DEFAULT_VERTEX_UV = floatArrayOf(0.0f, 0.0f)
 }

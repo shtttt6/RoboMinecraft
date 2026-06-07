@@ -18,6 +18,7 @@ object RoboMinecraftClient : ClientModInitializer {
 	internal lateinit var robotSelectKey: KeyMapping
 	internal lateinit var buyInfantryAmmoKey: KeyMapping
 	internal lateinit var buyHeroAmmoKey: KeyMapping
+	internal lateinit var judgeModeKey: KeyMapping
 	internal lateinit var aerialFlightToggleKey: KeyMapping
 	internal lateinit var aerialAscendKey: KeyMapping
 	internal lateinit var aerialDescendKey: KeyMapping
@@ -39,6 +40,7 @@ object RoboMinecraftClient : ClientModInitializer {
 		ClientTickEvents.START_CLIENT_TICK.register(::tickRobotShiftSuppression)
 		ClientTickEvents.START_CLIENT_TICK.register(::tickLocalCollisionBox)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickAutoAim)
+		ClientTickEvents.END_CLIENT_TICK.register(::tickJudgeModeToggle)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickAerialControls)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickShootingInput)
 		ClientTickEvents.END_CLIENT_TICK.register(::tickScreenKeys)

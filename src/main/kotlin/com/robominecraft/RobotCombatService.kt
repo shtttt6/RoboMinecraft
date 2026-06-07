@@ -18,12 +18,15 @@ import kotlin.math.roundToInt
 
 internal fun RoboMinecraft.registerDamageRules() {
 	ServerLivingEntityEvents.ALLOW_DAMAGE.register { entity, _, _ ->
-		entity !is ServerPlayer || !isAerialRobot(entity)
+		entity !is ServerPlayer || (!isAerialRobot(entity) && !isJudgeMode(entity))
 	}
 }
 
 internal fun RoboMinecraft.handleFireRequest(player: ServerPlayer) {
 	val state = stateFor(player)
+	if (state.judgeMode) {
+		return
+	}
 	val stats = state.stats()
 	val serverTick = player.level().server.tickCount.toDouble()
 	val shotIntervalTicks = 20.0 / stats.fireRateHz
@@ -64,6 +67,7 @@ internal fun RoboMinecraft.syncRobotHud(player: ServerPlayer, state: PilotState,
 		player,
 		RobotHudPayload(
 			enabled = state.enabled,
+			judgeMode = state.judgeMode,
 			heat = if (state.enabled) state.heat.roundToInt() else 0,
 			heatLimit = if (state.enabled) stats.heatLimit else 0,
 			heroAmmo = state.heroAmmo,
@@ -84,6 +88,7 @@ internal fun RoboMinecraft.killAerialPilot(player: ServerPlayer) {
 	if (player.isPassenger) {
 		player.stopRiding()
 	}
+	clearJudgeMode(player, stateFor(player))
 	player.isInvisible = false
 	discardRobotVehicle(player)
 	player.health = 0.0f
@@ -189,6 +194,7 @@ private fun RoboMinecraft.canHit(player: ServerPlayer, target: Entity): Boolean 
 	return target !== player &&
 		target !is RobotVehicleEntity &&
 		target.isAlive &&
+		(target !is ServerPlayer || !isJudgeMode(target)) &&
 		!target.isSpectator &&
 		target.isPickable &&
 		target.canBeHitByProjectile()

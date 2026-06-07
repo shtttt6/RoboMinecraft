@@ -19,6 +19,11 @@ data class PilotState(
 	var heroAmmo: Int = 0,
 	var infantryAmmo: Int = 0,
 	var aerialAmmo: Int = 0,
+	var judgeMode: Boolean = false,
+	var storedMayfly: Boolean = false,
+	var storedFlying: Boolean = false,
+	var storedNoPhysics: Boolean = false,
+	var storedNoGravity: Boolean = false,
 	var aerialFlightMode: Boolean = false,
 	var aerialAscending: Boolean = false,
 	var aerialDescending: Boolean = false

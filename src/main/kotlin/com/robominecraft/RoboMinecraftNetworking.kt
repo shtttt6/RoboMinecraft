@@ -12,6 +12,7 @@ internal fun RoboMinecraft.registerNetworking() {
 	PayloadTypeRegistry.playC2S().register(RobotConfigPayload.ID, RobotConfigPayload.CODEC)
 	PayloadTypeRegistry.playC2S().register(BuyAmmoPayload.ID, BuyAmmoPayload.CODEC)
 	PayloadTypeRegistry.playC2S().register(AerialControlPayload.ID, AerialControlPayload.CODEC)
+	PayloadTypeRegistry.playC2S().register(ToggleJudgeModePayload.ID, ToggleJudgeModePayload.CODEC)
 	PayloadTypeRegistry.playS2C().register(RobotHudPayload.ID, RobotHudPayload.CODEC)
 
 	ServerPlayNetworking.registerGlobalReceiver(FireBlasterPayload.ID) { _, context ->
@@ -31,6 +32,9 @@ internal fun RoboMinecraft.registerNetworking() {
 		state.aerialFlightMode = payload.flightMode
 		state.aerialAscending = payload.ascending
 		state.aerialDescending = payload.descending
+	}
+	ServerPlayNetworking.registerGlobalReceiver(ToggleJudgeModePayload.ID) { _, context ->
+		toggleJudgeMode(context.player())
 	}
 }
 

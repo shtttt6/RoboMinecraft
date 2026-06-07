@@ -9,6 +9,7 @@ import com.robominecraft.RobotKind
 
 object RobotClientState {
 	var enabled: Boolean = true
+	var judgeMode: Boolean = false
 	var heat: Int = 0
 	var heatLimit: Int = 1
 	var heroAmmo: Int = 0

@@ -36,6 +36,9 @@ internal fun RoboMinecraftClient.registerWorldRendering() {
 			if (!isRobotModeActive(player)) {
 				return@forEach
 			}
+			if (player.isInvisible) {
+				return@forEach
+			}
 			if (player.vehicle is RobotVehicleEntity) {
 				return@forEach
 			}
@@ -51,7 +54,7 @@ internal fun RoboMinecraftClient.registerWorldRendering() {
 
 internal fun RoboMinecraftClient.tickLocalCollisionBox(client: Minecraft) {
 	val player = client.player ?: return
-	val spec = if (isRobotModeActive(player)) robotPhysicalSpec(player) else null
+	val spec = if (isRobotModeActive(player) && !RobotClientState.judgeMode) robotPhysicalSpec(player) else null
 
 	if (spec == null) {
 		if (localCollisionBoxApplied) {
@@ -73,7 +76,7 @@ internal fun RoboMinecraftClient.tickAutoAim(client: Minecraft) {
 	}
 
 	val player = client.player ?: return
-	if (!isRobotModeActive() || !player.mainHandItem.isEmpty) {
+	if (!isRobotModeActive() || RobotClientState.judgeMode || !player.mainHandItem.isEmpty) {
 		return
 	}
 

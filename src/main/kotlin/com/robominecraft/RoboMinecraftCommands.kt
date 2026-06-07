@@ -180,6 +180,7 @@ internal fun RoboMinecraft.setRobotMode(player: ServerPlayer, enabled: Boolean) 
 		applyRobotAttributes(player, state, state.stats())
 		player.displayClientMessage(Component.literal("${statusLine(player)} | empty-hand left click fires | right click auto-aims"), true)
 	} else {
+		clearJudgeMode(player, state)
 		player.isInvisible = false
 		discardRobotVehicle(player)
 		resetRobotLocomotionState(state)

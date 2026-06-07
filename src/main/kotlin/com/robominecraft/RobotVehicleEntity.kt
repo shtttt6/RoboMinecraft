@@ -125,7 +125,11 @@ class RobotVehicleEntity(
 		}
 
 		if (passengers.isEmpty()) {
-			remove(RemovalReason.DISCARDED)
+			if (shouldPersistWithoutPassenger()) {
+				setDeltaMovement(Vec3.ZERO)
+			} else {
+				remove(RemovalReason.DISCARDED)
+			}
 		}
 	}
 
@@ -246,6 +250,14 @@ class RobotVehicleEntity(
 		setDeltaMovement(movement)
 		move(MoverType.SELF, deltaMovement)
 	}
+
+	private fun shouldPersistWithoutPassenger(): Boolean {
+		val level = level() as? ServerLevel ?: return false
+		val owner = ownerUuid?.let { level.server.playerList.getPlayer(it) } ?: return false
+		val state = RoboMinecraft.pilotStates[owner.uuid] ?: return false
+		return state.enabled && state.judgeMode && RoboMinecraft.robotVehicleIds[owner.uuid] == uuid
+	}
+
 	companion object {
 		private const val AERIAL_FATAL_FALL_DISTANCE_BLOCKS = 20.0
 		private const val AERIAL_FATAL_FALL_DISTANCE_BLOCKS_RANGE = 15.0
